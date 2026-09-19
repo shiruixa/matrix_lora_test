@@ -39,9 +39,8 @@ import sys
 import numpy as np
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-# 源码布局：…/matrix_viewer/diagnose.py → 上一级是工具根
-# 扁平布局（发布包）：diagnose.py 直接在工具根，此时靠 paths.TOOL_DIR 定位
-_TOOL_ROOT_GUESS = os.path.dirname(_HERE)
+# 正常情况靠 paths.TOOL_DIR 定位（它就是本文件所在目录）；这只是拿不到 paths 时的兜底
+_TOOL_ROOT_GUESS = _HERE
 
 
 # ── 可调阈值 ──────────────────────────────────────────────────────────────
