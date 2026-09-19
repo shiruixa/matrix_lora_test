@@ -1,0 +1,6 @@
+{
+  "_说明": "把本文件复制成同目录的 config.json，改成你自己的 ComfyUI 路径。",
+  "_关于优先级": "环境变量 COMFYUI_DIR 优先级更高；都不设会退回包内常量（作者本机路径，在你机器上不存在 → LoRA 列表为空）。",
+
+  "comfyui_dir": "D:/ComfyUI_windows_portable/ComfyUI"
+}

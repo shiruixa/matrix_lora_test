@@ -1,0 +1,221 @@
+{
+	"1": {
+		"class_type": "VAELoader",
+		"_meta": {
+			"title": "加载VAE"
+		},
+		"inputs": {
+			"vae_name": "qwen_image_vae.safetensors"
+		}
+	},
+	"2": {
+		"class_type": "VAEDecode",
+		"_meta": {
+			"title": "VAE解码"
+		},
+		"inputs": {
+			"vae": [
+				"1",
+				0
+			],
+			"samples": [
+				"7",
+				0
+			]
+		}
+	},
+	"3": {
+		"class_type": "CLIPLoader",
+		"_meta": {
+			"title": "加载CLIP"
+		},
+		"inputs": {
+			"clip_name": "qwen_3_06b_base.safetensors",
+			"type": "stable_diffusion",
+			"device": "default"
+		}
+	},
+	"4": {
+		"class_type": "EmptyLatentImage",
+		"_meta": {
+			"title": "空Latent图像"
+		},
+		"inputs": {
+			"width": 832,
+			"height": 1216,
+			"batch_size": 1
+		}
+	},
+	"5": {
+		"class_type": "Save Image (LoraManager)",
+		"_meta": {
+			"title": "Save Image (LoraManager)"
+		},
+		"inputs": {
+			"filename_prefix": "%date%_%seed%",
+			"file_format": "png",
+			"lossless_webp": false,
+			"quality": 100,
+			"embed_workflow": true,
+			"save_with_metadata": true,
+			"add_loras_to_prompt": true,
+			"add_counter_to_filename": false,
+			"save_as_recipe": false,
+			"images": [
+				"2",
+				0
+			]
+		}
+	},
+	"6": {
+		"class_type": "Seed (rgthree)",
+		"_meta": {
+			"title": "Seed (rgthree)"
+		},
+		"inputs": {
+			"seed": -1
+		}
+	},
+	"7": {
+		"class_type": "KSamplerAdvanced",
+		"_meta": {
+			"title": "K采样器（高级）"
+		},
+		"inputs": {
+			"add_noise": "enable",
+			"noise_seed": -1,
+			"steps": 30,
+			"cfg": 6,
+			"sampler_name": "dpmpp_2m",
+			"scheduler": "simple",
+			"start_at_step": 0,
+			"end_at_step": 10000,
+			"return_with_leftover_noise": "disable",
+			"latent_image": [
+				"4",
+				0
+			],
+			"positive": [
+				"10",
+				0
+			],
+			"negative": [
+				"11",
+				0
+			],
+			"model": [
+				"13",
+				0
+			]
+		}
+	},
+	"8": {
+		"class_type": "ImpactWildcardProcessor",
+		"_meta": {
+			"title": "POSITIVE"
+		},
+		"inputs": {
+			"wildcard_text": "masterpiece, best quality, highres, absurdres, very aesthetic, anime coloring, detailed skin, year 2025,__beauty_Transformers__",
+			"populated_text": "masterpiece, best quality, highres, ultra-detailed 3D, cinematic, soft natural light, hyper-real aesthetic, pos: masterpiece, best quality, highres, absurdres, very aesthetic, anime coloring, detailed skin, year 2025,{__Hardcore_Fuck__|__Qipao_MILF__}",
+			"mode": "populate",
+			"Select to add Wildcard": "Select the Wildcard to add to the text",
+			"seed": [
+				"6",
+				0
+			]
+		}
+	},
+	"9": {
+		"class_type": "ImpactWildcardProcessor",
+		"_meta": {
+			"title": "NEGATIVE"
+		},
+		"inputs": {
+			"wildcard_text": "masterpiece, best quality, highres, absurdres, very aesthetic, anime coloring, detailed skin, year 2025,__beauty_Transformers__",
+			"populated_text": "masterpiece, best quality, highres, ultra-detailed 3D, cinematic, soft natural light, hyper-real aesthetic, pos: masterpiece, best quality, highres, absurdres, very aesthetic, anime coloring, detailed skin, year 2025,{__Hardcore_Fuck__|__Qipao_MILF__}",
+			"mode": "populate",
+			"Select to add Wildcard": "Select the Wildcard to add to the text",
+			"seed": [
+				"6",
+				0
+			]
+		}
+	},
+	"10": {
+		"class_type": "CLIPTextEncode",
+		"_meta": {
+			"title": "CLIP文本编码 Pos"
+		},
+		"inputs": {
+			"text": [
+				"8",
+				0
+			],
+			"clip": [
+				"13",
+				1
+			]
+		}
+	},
+	"11": {
+		"class_type": "CLIPTextEncode",
+		"_meta": {
+			"title": "CLIP文本编码 Neg"
+		},
+		"inputs": {
+			"text": [
+				"9",
+				0
+			],
+			"clip": [
+				"13",
+				1
+			]
+		}
+	},
+	"12": {
+		"class_type": "UNet loader with Name (Image Saver)",
+		"_meta": {
+			"title": "UNet loader with Name (Image Saver)"
+		},
+		"inputs": {
+			"unet_name": "anima_baseV10.safetensors",
+			"weight_dtype": "default"
+		}
+	},
+	"13": {
+		"class_type": "Power Lora Loader (rgthree)",
+		"_meta": {
+			"title": "LoRA"
+		},
+		"inputs": {
+			"PowerLoraLoaderHeaderWidget": {
+				"type": "PowerLoraLoaderHeaderWidget"
+			},
+			"lora_1": {
+				"on": true,
+				"lora": "AnimaNSS4.safetensors",
+				"strength": 0.65
+			},
+			"lora_2": {
+				"on": true,
+				"lora": "gpt-image-2_anima-base1_v1.safetensors",
+				"strength": 1
+			},
+			"lora_3": {
+				"on": true,
+				"lora": "Anima_colorfix_v04-1ad7.safetensors",
+				"strength": 1
+			},
+			"➕ Add Lora": "",
+			"model": [
+				"12",
+				0
+			],
+			"clip": [
+				"3",
+				0
+			]
+		}
+	}
+}

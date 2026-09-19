@@ -1,0 +1,28 @@
+{
+  "任务名": "LoRA矩阵_3lora_test",
+  "steps": 10,
+  "cfg": 1,
+  "batch": 1,
+  "包含全零基线": true,
+  "seed": 2087726586,
+
+  "通用提示词": "masterpiece, best quality, amazing quality, absurdres, highres, newest, score_9, score_8, score_7, year2025",
+  "负面提示词": "worst quality, low quality, score_1, score_2, score_3, artist name, \nThis image suffers from low resolution and poor quality, appearing pixelated, blurry, and full of compression or jpeg artifacts.\nThe scene is cluttered with many small figures, heads, or people in the background that look like chibi characters, dolls, or fumo dolls, surrounding the subject with a large collection of plush toys.\nThe artwork looks like a fake anime or game screenshot with noise, errors, and scan lines, resembling something unfinished sketch with a simple, abstract, or monochrome background.\nThe anatomy is incorrect, featuring bad proportions, bad perspective, and ugly, deformed body parts such as bad hands, bad feet, fused or missing fingers, extra limbs, and twisted or flexible deformities. The image contains four fingers, six fingers, four toes, six toes.\nThis image contains many of the artist's signatures around the edges, and contains many watermarks, signatures, logos, or censorship bars like mosaics, and has an low-score AI-generated error.\nThe character in this image has a white area above the eyes, a white forehead, and many lines on the eyelids.\nDraw by @Alexander Groznov, @Andrew Wyeth, @Boris Vallejo, @Entei Ryu, @Manara Milo, @Marco Turini, @Norman Rockwell, @Paulina Sadowska, @Syd Mead, @Syd Mills, @THORES Shibamoto, @chinese anime style, @renwan.",
+  "尺寸": {"宽": 896, "高": 1152},
+
+  "场景": [
+    "1girl, solo, mordred (fate), fate (series), standing, looking at viewer, white background"
+  ],
+
+  "常驻lora": [
+    {"lora": "anima-turbo-lora-v0.2-1b55", "强度": 1.0}
+  ],
+
+  "lora矩阵": [
+    {"lora": "HowanJoe", "触发词": "@HowanJoe", "强度": {"最小": 0.0, "最大": 1.0, "段数": 3}},
+    {"lora": "bantan-step00007000", "触发词": "", "强度": {"最小": 0.0, "最大": 1.0, "段数": 3}},
+    {"lora": "XSJF Style V1", "触发词": "", "强度": {"最小": 0.0, "最大": 1.0, "段数": 3}}
+  ],
+
+  "base_model": "anima_baseV10.safetensors"
+}
