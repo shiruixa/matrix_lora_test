@@ -85,6 +85,11 @@ def output_dir():
     return os.path.join(d, "output") if d else ""
 
 
+# 生图端与查看器共用的输出根目录。
+# 以前这个常量住在包的 __init__.py 里；扁平化后没有包了，归到「路径」这个模块最自然。
+COMFYUI_OUTPUT = output_dir()
+
+
 def source():
     """当前用的是哪一档来源 —— 排查「路径不对」时有用。"""
     if _from_env():
@@ -141,14 +146,10 @@ def report():
         d or "(未解析到)", source(), comfyui_url(), url_source())
 
 
-__all__ = ["comfyui_dir", "output_dir", "source", "report", "CONFIG_PATH",
+__all__ = ["comfyui_dir", "output_dir", "COMFYUI_OUTPUT", "source", "report", "CONFIG_PATH",
            "comfyui_url", "url_source", "publish_url", "DEFAULT_URL", "TOOL_DIR"]
 
 if __name__ == "__main__":
     print(report())
     print("  LoRA 目录:", os.path.join(comfyui_dir(), "models", "loras"))
     print("  配置文件  :", CONFIG_PATH, "(存在)" if os.path.isfile(CONFIG_PATH) else "(不存在，用兜底)")
-
-
-# 扁平版：原来由包的 __init__.py 提供，现在归到这里
-COMFYUI_OUTPUT = output_dir()
