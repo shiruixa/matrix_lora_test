@@ -63,6 +63,11 @@ def generate_tasks(cfg):
     batch = cfg.get("batch", 2)
     size = cfg.get("尺寸", {"宽": 832, "高": 1216})
     model_name = cfg.get("base_model", "")
+    # CLIP / VAE 也由配置指定 —— 不同人用的底模栈不一样（Anima 是 UNet+CLIPLoader，
+    # SDXL/Pony 是 CheckpointLoader），不能预设作者的模型文件名。留空则沿用
+    # workflow.json 模板里的值（模板本身是用户可编辑的）。
+    clip_name = cfg.get("clip_name", "")
+    vae_name = cfg.get("vae_name", "")
     steps = cfg.get("steps", 10)
     cfg_val = cfg.get("cfg", 1)
     # 整批共用种子：没配就随机一个；配置了就用指定的（方便重跑复现）
@@ -158,6 +163,11 @@ def generate_tasks(cfg):
                 # 维度坐标（供查看器使用）
                 "坐标": {lora_names[i]: combo[i] for i in range(len(combo))},
             }
+            # 配置里给了才写 —— 保持旧配置生成的 task 结构完全不变（向后兼容）
+            if clip_name:
+                task["clip_name"] = clip_name
+            if vae_name:
+                task["vae_name"] = vae_name
             tasks.append(task)
 
     return tasks, task_name

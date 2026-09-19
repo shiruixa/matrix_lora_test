@@ -131,6 +131,16 @@ BODY = r"""
         <button class="btn ghost" onclick="genLoadModels()">⟳</button>
       </div>
       <div class="row">
+        <label>CLIP</label>
+        <select id="g-clip" class="grow"></select>
+        <button class="btn ghost" onclick="genLoadModels()">⟳</button>
+      </div>
+      <div class="row">
+        <label>VAE</label>
+        <select id="g-vae" class="grow"></select>
+        <button class="btn ghost" onclick="genLoadModels()">⟳</button>
+      </div>
+      <div class="row">
         <label>尺寸</label>
         <input type="number" id="g-w" class="w80" step="8" />
         <span class="tag">×</span>
@@ -402,19 +412,47 @@ function genCheckNodes(){
 }
 
 // ══ 模型下拉 ══
+// 用一个模型列表填某个下拉（按 group 分 optgroup）。
+// 底模 / CLIP / VAE 三处共用同一套填法，只是数据源不同。
+function genFillSelect(id, list){
+  var sel = document.getElementById(id);
+  if (!sel) return;
+  var keep = sel.value;                 // 重新加载时尽量保住当前选择
+  sel.innerHTML = '';
+  var groups = {};
+  (list || []).forEach(function(m){ (groups[m.group] = groups[m.group] || []).push(m.name) });
+  Object.keys(groups).forEach(function(g){
+    var og = document.createElement('optgroup'); og.label = g;
+    groups[g].forEach(function(n){
+      var o = document.createElement('option'); o.value = n; o.textContent = n; og.appendChild(o);
+    });
+    sel.appendChild(og);
+  });
+  if (keep) genSelectValue(id, keep);
+}
+
+// 选中某个值；下拉里没有就补一个「(配置里指定)」选项 ——
+// 否则载入一份指定了别处模型的预设时，用户会以为自己的配置丢了。
+function genSelectValue(id, value){
+  if (!value) return;
+  var sel = document.getElementById(id);
+  if (!sel) return;
+  var found = Array.prototype.some.call(sel.options, function(o){ return o.value === value });
+  if (!found) {
+    var o = document.createElement('option');
+    o.value = value;
+    o.textContent = value + '  (配置里指定)';
+    sel.appendChild(o);
+  }
+  sel.value = value;
+}
+
 function genLoadModels(){
   api('GET','/api/models').then(function(d){
     genAllModels = (d && d.files) || [];
-    var sel = document.getElementById('g-model'); sel.innerHTML = '';
-    var groups = {};
-    genAllModels.forEach(function(m){ (groups[m.group] = groups[m.group] || []).push(m.name) });
-    Object.keys(groups).forEach(function(g){
-      var og = document.createElement('optgroup'); og.label = g;
-      groups[g].forEach(function(n){
-        var o = document.createElement('option'); o.value = n; o.textContent = n; og.appendChild(o);
-      });
-      sel.appendChild(og);
-    });
+    genFillSelect('g-model', d && d.files);   // 底模 / UNet / checkpoint
+    genFillSelect('g-clip',  d && d.clips);   // 文本编码器
+    genFillSelect('g-vae',   d && d.vaes);    // VAE
     if(d && d.comfyui_online === false) genMsg('ComfyUI 没在运行，执行前请先启动它', 'err');
   });
 }
@@ -534,6 +572,8 @@ function genReadConfig(){
     '场景': scenes.length ? scenes : [''],
     '尺寸': {'宽': gi('g-w',896), '高': gi('g-h',1152)},
     'base_model': gv('g-model'),
+    'clip_name': gv('g-clip'),
+    'vae_name': gv('g-vae'),
     'steps': gi('g-steps',10),
     'cfg': gf('g-cfg',1),
     'batch': Math.max(1, gi('g-batch',1)),
@@ -561,14 +601,9 @@ function genApplyConfig(cfg, keepName){
   var sz = cfg['尺寸'] || {};
   document.getElementById('g-w').value = sz['宽'] || 896;
   document.getElementById('g-h').value = sz['高'] || 1152;
-  if(cfg['base_model']){
-    var sel = document.getElementById('g-model');
-    if(!Array.prototype.some.call(sel.options, function(o){return o.value===cfg['base_model']})){
-      var o = document.createElement('option'); o.value = cfg['base_model'];
-      o.textContent = cfg['base_model'] + '  (配置里指定)'; sel.appendChild(o);
-    }
-    sel.value = cfg['base_model'];
-  }
+  genSelectValue('g-model', cfg['base_model']);
+  genSelectValue('g-clip',  cfg['clip_name']);
+  genSelectValue('g-vae',   cfg['vae_name']);
   document.getElementById('g-steps').value = cfg['steps'] !== undefined ? cfg['steps'] : 10;
   document.getElementById('g-cfg').value   = cfg['cfg']   !== undefined ? cfg['cfg']   : 1;
   document.getElementById('g-batch').value = cfg['batch'] !== undefined ? cfg['batch'] : 1;

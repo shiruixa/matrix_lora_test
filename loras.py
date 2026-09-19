@@ -28,6 +28,10 @@ LORAS_ROOT = os.path.join(COMFYUI_DIR, "models", "loras") if COMFYUI_DIR else ""
 # base_model 候选目录 —— 实测 anima_baseV10 在 diffusion_models、
 # terraRising 在 checkpoints，两个都得扫，缺一个用户就选不到模型
 MODEL_DIRS = ("diffusion_models", "unet", "checkpoints")
+# CLIP / VAE 也各有自己的目录，命名习惯因模型栈而异，所以都扫上。
+# 底模/CLIP/VAE 三项全部由用户在「新建矩阵」页里选，工具不预设任何模型。
+CLIP_DIRS = ("clip", "text_encoders")
+VAE_DIRS = ("vae",)
 
 LORA_EXTS = (".safetensors", ".ckpt", ".pt")
 PREVIEW_EXTS = (".jpeg", ".jpg", ".webp", ".png")
@@ -99,12 +103,12 @@ def find_lora_preview(name):
     return ""
 
 
-def scan_models():
-    """扫描可作 base_model 的模型。返回 [{'name','group'}]，group = 所在目录名。"""
+def _scan_dirs(dirs):
+    """扫 models/ 下若干子目录里的模型文件。返回 [{'name','group'}]，group = 目录名。"""
     out = []
     if not COMFYUI_DIR:
         return out
-    for grp in MODEL_DIRS:
+    for grp in dirs:
         d = os.path.join(COMFYUI_DIR, "models", grp)
         if not os.path.isdir(d):
             continue
@@ -112,3 +116,18 @@ def scan_models():
             if f.lower().endswith((".safetensors", ".ckpt", ".pt")):
                 out.append({"name": f, "group": grp})
     return out
+
+
+def scan_models():
+    """扫描可作 base_model 的模型（底模 / UNet / checkpoint）。"""
+    return _scan_dirs(MODEL_DIRS)
+
+
+def scan_clips():
+    """扫描可作文本编码器的 CLIP。"""
+    return _scan_dirs(CLIP_DIRS)
+
+
+def scan_vaes():
+    """扫描可作 VAE 的模型。"""
+    return _scan_dirs(VAE_DIRS)

@@ -74,10 +74,24 @@ python -m pip install scikit-image opencv-python-headless piexif dill segment-an
 
 ### 3. 模型
 
-- Anima UNet / checkpoint
-- 文本编码器（放 `models/clip/`）
-- VAE（放 `models/vae/`）
-- 你要测的 LoRA（放 `models/loras/`）
+**工具不预设任何模型** —— 底模、CLIP、VAE 三项都在「新建矩阵」页里选，
+用的是你自己 ComfyUI 里的文件：
+
+| 项 | 从哪扫 | 常见目录 |
+|---|---|---|
+| **模型**（底模） | `diffusion_models/` `unet/` `checkpoints/` | UNet 或整包 checkpoint |
+| **CLIP** | `clip/` `text_encoders/` | 文本编码器 |
+| **VAE** | `vae/` | — |
+
+外加你要测的 **LoRA**（放 `models/loras/`）。
+
+> **`workflow.json` 是模板，注意它跟模型家族是绑的。**
+> 默认那份是 Anima 栈（`UNet loader with Name` + `CLIPLoader` + `VAELoader`）。
+> 换别的模型家族（SDXL / Pony / SD1.5 …）要替换模板里的加载节点 ——
+> `task_runner` 会按节点类型自动决定写 `unet_name` 还是 `ckpt_name`，
+> 但节点本身得由你换成对应的加载器。
+>
+> 三个模型名在配置里留空时，就沿用模板里的值。
 
 ---
 
@@ -156,6 +170,7 @@ python task_runner.py                        # 执行 json/ 下最新那份清�
 
 | 字段 | 说明 |
 |---|---|
+| `base_model` / `clip_name` / `vae_name` | 这三个模型名，留空则用 `workflow.json` 模板里的值 |
 | `常驻lora` | 每张图都加载、不进网格（如加速 LoRA） |
 | `触发词` | 拼进正面提示词；**强度为 0 时不加** |
 | `包含全零基线` | 是否额外生成一张「不加任何被测 LoRA」的对照图 |

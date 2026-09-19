@@ -264,7 +264,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/api/lora-preview":
             self._serve_preview(params)
         elif path == "/api/models":
+            # 底模 / CLIP / VAE 三组都给 —— 界面上是三个独立下拉，不预设任何模型
             self._json({"ok": True, "files": loras.scan_models(),
+                        "clips": loras.scan_clips(), "vaes": loras.scan_vaes(),
                         "comfyui_online": jobs.comfyui_online()})
         elif path == "/api/check-nodes":
             self._json({"ok": True, **check_nodes()})

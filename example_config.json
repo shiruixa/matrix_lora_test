@@ -24,5 +24,7 @@
     {"lora": "XSJF Style V1", "触发词": "", "强度": {"最小": 0.0, "最大": 1.0, "段数": 3}}
   ],
 
-  "base_model": "anima_baseV10.safetensors"
+  "base_model": "anima_baseV10.safetensors",
+  "clip_name": "qwen_3_06b_base.safetensors",
+  "vae_name": "qwen_image_vae.safetensors"
 }

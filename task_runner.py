@@ -187,11 +187,15 @@ def _run_task(task):
     if model_name:
         if "unet" in wf_copy[NODE_UNET]["class_type"].lower():
             wf_copy[NODE_UNET]["inputs"]["unet_name"] = model_name
-            # UNET 模型需要 clip 和 vae
-            if "clip_name" in wf_copy[NODE_CLIP]["inputs"]:
-                wf_copy[NODE_CLIP]["inputs"]["clip_name"] = task.get("clip_name", "qwen_3_06b_base.safetensors")
-            if "vae_name" in wf_copy[NODE_VAE]["inputs"]:
-                wf_copy[NODE_VAE]["inputs"]["vae_name"] = task.get("vae_name", "qwen_image_vae.safetensors")
+            # UNET 模型需要 clip 和 vae。
+            # ⚠️ 这里**不设默认值** —— 原先写的是 task.get("clip_name", "qwen_3_06b_base.safetensors")，
+            # 等于强制所有人用作者的 CLIP/VAE；而 matrix_generator 以前又不写这两个字段，
+            # 于是那个兜底永远生效。现在只在配置确实指定时才覆盖，否则保留 workflow.json
+            # 模板里的值（模板是用户可编辑的）。
+            if task.get("clip_name") and "clip_name" in wf_copy[NODE_CLIP]["inputs"]:
+                wf_copy[NODE_CLIP]["inputs"]["clip_name"] = task["clip_name"]
+            if task.get("vae_name") and "vae_name" in wf_copy[NODE_VAE]["inputs"]:
+                wf_copy[NODE_VAE]["inputs"]["vae_name"] = task["vae_name"]
         else:
             wf_copy[NODE_UNET]["inputs"]["ckpt_name"] = model_name
 
