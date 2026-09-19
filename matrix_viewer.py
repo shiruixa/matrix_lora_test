@@ -36,7 +36,12 @@ def main():
     # 路径解析结果打在启动日志里 —— 路径不对是最高频的「跑不起来」原因
     try:
         import paths as _paths
+        # 先打诊断再发布地址 —— 反过来的话 report() 会把「默认值」误报成
+        # 「环境变量 COMFYUI_URL」（发布动作自己设了这个变量）
         print(f"[matrix_viewer] {_paths.report()}")
+        # 再把自己配置里的地址发布到环境变量，好让 comfy_api（提交 prompt 用）
+        # 跟查看器连同一个实例 —— 它在另一个包里，刻意不反向 import 这里
+        _paths.publish_url()
         if not _paths.comfyui_dir():
             print("[matrix_viewer] ⚠ 没解析到 ComfyUI 目录，请设环境变量 COMFYUI_DIR "
                   "或 config.json")

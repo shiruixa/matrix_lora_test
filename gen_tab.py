@@ -140,6 +140,7 @@ BODY = r"""
         <select id="g-vae" class="grow"></select>
         <button class="btn ghost" onclick="genLoadModels()">⟳</button>
       </div>
+      <div class="msg" id="g-srcmsg" style="margin:2px 0 0"></div>
       <div class="row">
         <label>尺寸</label>
         <input type="number" id="g-w" class="w80" step="8" />
@@ -447,12 +448,27 @@ function genSelectValue(id, value){
   sel.value = value;
 }
 
+// 清单是哪来的 —— 用户看到空列表时能立刻知道为什么
+function genModelSource(src){
+  var el = document.getElementById('g-srcmsg');
+  if (!el) return;
+  var txt = {
+    comfyui: '模型清单来自运行中的 ComfyUI',
+    disk:    '模型清单来自磁盘扫描（ComfyUI 未运行）',
+    none:    '拿不到模型清单 —— ComfyUI 没运行，磁盘路径也没配'
+  }[src];
+  if (!txt) { el.className = 'msg'; el.textContent = ''; return }
+  el.className = 'msg ' + (src === 'comfyui' ? 'ok' : (src === 'disk' ? '' : 'err'));
+  el.textContent = txt;
+}
+
 function genLoadModels(){
   api('GET','/api/models').then(function(d){
     genAllModels = (d && d.files) || [];
     genFillSelect('g-model', d && d.files);   // 底模 / UNet / checkpoint
     genFillSelect('g-clip',  d && d.clips);   // 文本编码器
     genFillSelect('g-vae',   d && d.vaes);    // VAE
+    genModelSource(d && d.source);
     if(d && d.comfyui_online === false) genMsg('ComfyUI 没在运行，执行前请先启动它', 'err');
   });
 }

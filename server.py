@@ -65,7 +65,7 @@ def check_nodes(timeout=6):
         "fallback": paths.source().startswith("包内常量兜底"),
     }
 
-    url = "http://127.0.0.1:8188/object_info"
+    url = paths.comfyui_url() + "/object_info"
     try:
         with urllib.request.urlopen(url, timeout=timeout) as r:
             info = json.loads(r.read().decode("utf-8"))
@@ -259,15 +259,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/api/metadata":
             self._handle_metadata(params)
         elif path == "/api/loras":
+            items, src = loras.list_loras()
             self._json({"ok": True, "root": loras.LORAS_ROOT,
-                        "files": loras.scan_loras()})
+                        "files": items, "source": src})
         elif path == "/api/lora-preview":
             self._serve_preview(params)
         elif path == "/api/models":
-            # 底模 / CLIP / VAE 三组都给 —— 界面上是三个独立下拉，不预设任何模型
-            self._json({"ok": True, "files": loras.scan_models(),
-                        "clips": loras.scan_clips(), "vaes": loras.scan_vaes(),
-                        "comfyui_online": jobs.comfyui_online()})
+            # 底模 / CLIP / VAE 三组都给 —— 界面上是三个独立下拉，不预设任何模型。
+            # 清单优先向运行中的 ComfyUI 要（见 loras.list_*），离线才退回扫盘；
+            # source 一并回给前端，好让用户知道这份清单是哪来的。
+            models, ms = loras.list_models()
+            clips, cs = loras.list_clips()
+            vaes, vs = loras.list_vaes()
+            srcs = (ms, cs, vs)
+            source = ("comfyui" if all(s == "comfyui" for s in srcs)
+                      else "disk" if "disk" in srcs else "none")
+            self._json({"ok": True, "files": models, "clips": clips, "vaes": vaes,
+                        "source": source,
+                        # 用 loras 那份**带缓存**的在线判定（同一个 /system_stats）。
+                        # 上面 list_* 刚探过、缓存已填，这里读缓存 = 不再付探测代价
+                        "comfyui_online": loras.comfyui_ready()})
         elif path == "/api/check-nodes":
             self._json({"ok": True, **check_nodes()})
         elif path == "/api/tasklists":
@@ -459,7 +470,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         """
         if not jobs.comfyui_online():
             self._json({"ok": False,
-                        "error": "ComfyUI 没在运行（127.0.0.1:8188 无响应），先启动它"})
+                        "error": "ComfyUI 没在运行（%s 无响应），先启动它"
+                                 % paths.comfyui_url()})
             return
 
         only = data.get("only")

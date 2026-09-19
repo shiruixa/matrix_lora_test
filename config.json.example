@@ -1,6 +1,10 @@
 {
-  "_说明": "把本文件复制成同目录的 config.json，改成你自己的 ComfyUI 路径。",
-  "_关于优先级": "环境变量 COMFYUI_DIR 优先级更高；都不设会退回包内常量（作者本机路径，在你机器上不存在 → LoRA 列表为空）。",
+  "_说明": "把本文件复制成同目录的 config.json，改成你自己的 ComfyUI 路径和地址。",
+  "_关于优先级": "环境变量 COMFYUI_DIR / COMFYUI_URL 优先级更高；都不设则用下面的值，再没有就用默认。",
 
+  "_comfyui_url 说明": "ComfyUI 服务地址。模型/LoRA 清单优先向**正在运行的这个地址**要（不用配路径、且尊重它的 extra_model_paths.yaml）；连不上才退回按 comfyui_dir 扫磁盘。",
+  "comfyui_url": "http://127.0.0.1:8188",
+
+  "_comfyui_dir 说明": "ComfyUI 根目录。只在上面那个地址连不上时用来扫盘兜底 —— 填错/不填则拿不到清单，但不影响已生成图片的浏览与融合诊断。",
   "comfyui_dir": "D:/ComfyUI_windows_portable/ComfyUI"
 }

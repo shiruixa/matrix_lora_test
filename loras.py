@@ -131,3 +131,190 @@ def scan_clips():
 def scan_vaes():
     """扫描可作 VAE 的模型。"""
     return _scan_dirs(VAE_DIRS)
+
+
+# ── 清单来源：优先问运行中的 ComfyUI，离线才退回磁盘扫描 ──────────────────
+#
+# ComfyUI 的每个加载节点都在 /object_info 里暴露「可选模型」的枚举，这才是最准的清单：
+#   - 不用先配 ComfyUI 路径（配错也不会静默给空列表）
+#   - **尊重 ComfyUI 自己的 extra_model_paths.yaml** —— 模型放在外挂目录也能看到，
+#     而硬扫 models/ 是看不到的
+#   - 列出来的东西保证是 ComfyUI 真能加载的
+#
+# 离线时退回扫盘，这样不启动 ComfyUI 也能先配矩阵、看图、跑诊断。
+# ⚠️ Power Lora Loader (rgthree) 不暴露枚举（它吃动态字符串），
+#    但标准 LoraLoader 给的是同一份清单，所以照样拿得到 LoRA。
+API_SOURCES = {
+    "models": [("UNETLoader", "unet_name"), ("CheckpointLoaderSimple", "ckpt_name")],
+    "clips": [("CLIPLoader", "clip_name")],
+    "vaes": [("VAELoader", "vae_name")],
+    "loras": [("LoraLoader", "lora_name")],
+}
+API_TIMEOUT = 6
+
+# 在线状态探测 + 缓存。
+#
+# ⚠️ 为什么必须有这层：实测本机（装了网络过滤驱动的环境）**连不通的端口要 ~2 秒
+# 才返回拒绝**，而不是瞬间 ECONNREFUSED。不缓存的话「底模+CLIP+VAE+LoRA」五处各探
+# 一次 = 10 秒白等（下拉框十秒不出东西）。缓存后：ComfyUI 关着时整个 TTL 窗口内
+# 只付一次 2 秒。
+_API_STATE = {"t": 0.0, "ok": False}
+API_PROBE_TTL = 5.0     # 秒 —— 够短，用户启动 ComfyUI 后很快能反映出来
+
+
+def comfyui_ready(max_age=API_PROBE_TTL):
+    """ComfyUI 在线吗？结果缓存 max_age 秒，避免每次都付端口探测的代价。"""
+    import time
+    now = time.time()
+    if now - _API_STATE["t"] < max_age:
+        return _API_STATE["ok"]
+    p = _paths_module()
+    ok = False
+    if p:
+        import urllib.request
+        try:
+            with urllib.request.urlopen(p.comfyui_url() + "/system_stats", timeout=2) as r:
+                ok = r.status == 200
+        except Exception:
+            ok = False
+    _API_STATE.update(t=now, ok=ok)
+    return ok
+
+
+def _paths_module():
+    """取 paths 模块（两种布局都能拿到）；拿不到返回 None。"""
+    try:
+        import paths
+        return paths
+    except Exception:
+        return None
+
+
+def _enum_from_api(node, field, timeout=API_TIMEOUT):
+    """向 ComfyUI 要某个节点的枚举清单。
+
+    返回 None = **没问到**（连不上/节点不存在）；返回 [] = 问到了但清单是空的。
+    这个区别很重要 —— 前者要退回扫盘，后者说明「ComfyUI 确实没有模型」。
+    """
+    import json
+    import urllib.parse
+    import urllib.request
+
+    p = _paths_module()
+    if not p:
+        return None
+    try:
+        url = "%s/object_info/%s" % (p.comfyui_url(), urllib.parse.quote(node))
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            data = json.loads(r.read().decode("utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, dict) or not data:
+        return None                      # 节点不存在
+    node_def = next(iter(data.values()))
+    for sect in ("required", "optional"):
+        spec = ((node_def.get("input") or {}).get(sect) or {}).get(field)
+        if isinstance(spec, list) and spec and isinstance(spec[0], list):
+            return [str(x) for x in spec[0]]
+    return []                            # 节点在，但没有这个字段
+
+
+def _collect_from_api(kind):
+    """按 API_SOURCES 收集某一类的名字（去重）。全问不到返回 None。"""
+    # 先看一次在线状态（有缓存）—— 离线就直接回 None 走扫盘，
+    # 不然后面每个节点都要各等一次连接失败
+    if not comfyui_ready():
+        return None
+    got_any, names = False, []
+    for node, field in API_SOURCES[kind]:
+        got = _enum_from_api(node, field)
+        if got is None:
+            continue
+        got_any = True
+        names.extend(got)
+    if not got_any:
+        return None
+    seen, out = set(), []
+    for n in names:
+        if n not in seen:
+            seen.add(n)
+            out.append(n)
+    return out
+
+
+def _model_items(names):
+    """API 来的名字没有目录概念，group 统一给 'ComfyUI'（前端靠它做 optgroup）。"""
+    return [{"name": n, "group": "ComfyUI"} for n in sorted(names)]
+
+
+def _lora_items(names):
+    """把 ComfyUI 给的相对路径（如 Style/Artist/x.safetensors）拼成与扫盘一致的字段。
+
+    size/mtime 没有就置 0；has_preview 只在磁盘路径能解析出来时才去查 ——
+    预览是增强不是依赖，没配路径就是纯文字列表，前端本来就能处理。
+    """
+    out = []
+    for n in names:
+        rel = str(n).replace("\\", "/")
+        parts = rel.split("/")
+        fname = parts[-1]
+        stem, ext = os.path.splitext(fname)
+        item = {
+            "name": fname,
+            "noext": stem,
+            "relpath": rel,
+            "dir": "/".join(parts[:-1]),
+            "top": parts[0] if len(parts) > 1 else "",
+            "ext": ext.lower(),
+            "size": 0,
+            "mtime": 0,
+            "has_preview": False,
+        }
+        if LORAS_ROOT:
+            fp = os.path.join(LORAS_ROOT, rel.replace("/", os.sep))
+            if os.path.isfile(fp):
+                try:
+                    st = os.stat(fp)
+                    item["size"], item["mtime"] = st.st_size, st.st_mtime
+                except OSError:
+                    pass
+                item["has_preview"] = bool(_preview_for(os.path.dirname(fp), stem))
+        out.append(item)
+    out.sort(key=lambda x: x["relpath"].lower())
+    return out
+
+
+def list_models():
+    """底模清单。返回 (items, source)，source ∈ {'comfyui','disk','none'}"""
+    names = _collect_from_api("models")
+    if names is not None:
+        return _model_items(names), "comfyui"
+    items = scan_models()
+    return items, ("disk" if items else "none")
+
+
+def list_clips():
+    """CLIP 清单。返回 (items, source)"""
+    names = _collect_from_api("clips")
+    if names is not None:
+        return _model_items(names), "comfyui"
+    items = scan_clips()
+    return items, ("disk" if items else "none")
+
+
+def list_vaes():
+    """VAE 清单。返回 (items, source)"""
+    names = _collect_from_api("vaes")
+    if names is not None:
+        return _model_items(names), "comfyui"
+    items = scan_vaes()
+    return items, ("disk" if items else "none")
+
+
+def list_loras():
+    """LoRA 清单。返回 (items, source)"""
+    names = _collect_from_api("loras")
+    if names is not None:
+        return _lora_items(names), "comfyui"
+    items = scan_loras()
+    return items, ("disk" if items else "none")

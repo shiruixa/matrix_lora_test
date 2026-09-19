@@ -12,13 +12,15 @@ import time
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
-import task_runner
+import paths, task_runner  # noqa: E402
 
 _LOCK = threading.Lock()
 _JOB = {"state": "idle"}
 LOG_MAX = 200
 
-COMFYUI_PROMPT_URL = "http://127.0.0.1:8188"
+# ComfyUI 地址不写死 —— 统一由 paths.comfyui_url() 解析
+# （环境变量 COMFYUI_URL → config.json 的 comfyui_url → 默认 127.0.0.1:8188）。
+# 每次调用现取，这样用户在 config.json 里改了地址不用重启查看器。
 
 
 def _load_tasks(path):
@@ -132,7 +134,7 @@ def comfyui_online(timeout=2):
     """检测 ComfyUI 是否在线，供 UI 在执行前提示。"""
     import urllib.request
     try:
-        with urllib.request.urlopen(COMFYUI_PROMPT_URL + "/system_stats",
+        with urllib.request.urlopen(paths.comfyui_url() + "/system_stats",
                                     timeout=timeout) as r:
             return r.status == 200
     except Exception:

@@ -2,18 +2,29 @@
 ComfyUI API 客户端 —— 提交 prompt、轮询结果。
 """
 import json
+import os
 import time
 import urllib.request
 
-COMFYUI_HOST = "127.0.0.1"
-COMFYUI_PORT = 8188
+DEFAULT_BASE = "http://127.0.0.1:8188"
 POLL_FIRST_DELAY = 3   # 提交后首次查队列延迟（秒）——太慢则空等，太快则早查一次
 POLL_INTERVAL = 5      # 未完成时的重复查询间隔（秒）——本地 API 查询很轻，5s 一次无压力
 
 
+def base_url():
+    """ComfyUI 服务地址。
+
+    读环境变量 `COMFYUI_URL`，没有则用默认。**刻意不反向 import 上层工具的配置模块**
+    —— 本模块是通用客户端，不该依赖某个具体工具。上层工具启动时会把自己配置里的
+    地址发布进环境变量（`paths.publish_url()`），两边就一致了。
+    每次调用现取，改配置不用重启。
+    """
+    return (os.environ.get("COMFYUI_URL") or "").strip().rstrip("/") or DEFAULT_BASE
+
+
 def _url(endpoint):
     """拼接 ComfyUI API 完整 URL"""
-    return f"http://{COMFYUI_HOST}:{COMFYUI_PORT}{endpoint}"
+    return base_url() + endpoint
 
 
 def get(endpoint):

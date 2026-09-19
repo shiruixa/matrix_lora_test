@@ -44,7 +44,8 @@ def _from_env():
     return v.replace("/", os.sep) if v else ""
 
 
-def _from_config():
+def _cfg_get(key):
+    """从 config.json 读一个字符串字段；读不到返回 ''。"""
     try:
         with open(CONFIG_PATH, encoding="utf-8") as f:
             cfg = json.load(f)
@@ -52,7 +53,11 @@ def _from_config():
         return ""
     if not isinstance(cfg, dict):
         return ""
-    v = str(cfg.get("comfyui_dir") or "").strip()
+    return str(cfg.get(key) or "").strip()
+
+
+def _from_config():
+    v = _cfg_get("comfyui_dir")
     return v.replace("/", os.sep) if v else ""
 
 
@@ -91,13 +96,53 @@ def source():
     return "解析失败"
 
 
+# ── ComfyUI 服务地址 ──────────────────────────────────────────────────────
+# 同一个「ComfyUI 在哪」的问题，只是问的是「服务在哪」而不是「文件在哪」。
+# 以前这个地址写死在 5 个文件里，想连别的端口/别的机器就得改代码。
+DEFAULT_URL = "http://127.0.0.1:8188"
+
+
+def _url_from_env():
+    return (os.environ.get("COMFYUI_URL") or "").strip()
+
+
+def comfyui_url():
+    """ComfyUI 服务地址。优先级：环境变量 COMFYUI_URL → config.json 的 comfyui_url → 默认。"""
+    return (_url_from_env() or _cfg_get("comfyui_url") or DEFAULT_URL).rstrip("/")
+
+
+def url_source():
+    """地址用的是哪一档来源 —— 和 source() 一样，排查「连不上」时有用。"""
+    if _url_from_env():
+        return "环境变量 COMFYUI_URL"
+    if _cfg_get("comfyui_url"):
+        return "config.json"
+    return "默认值"
+
+
+def publish_url():
+    """把解析出来的地址发布到环境变量 COMFYUI_URL。
+
+    为什么要这样：`comfy_api.py`（提交 prompt 用）是独立模块，刻意不反向 import
+    本模块。两边靠这个环境变量对齐 —— 工具启动时发布一次，comfy_api 每次请求现读，
+    于是「查看器连哪，提交就连哪」。
+
+    已经被显式设过 COMFYUI_URL 就不覆盖（那个优先级更高）。
+    """
+    if not _url_from_env():
+        os.environ["COMFYUI_URL"] = comfyui_url()
+    return os.environ["COMFYUI_URL"]
+
+
 def report():
     """给启动日志用的一行诊断。"""
     d = comfyui_dir()
-    return "ComfyUI 目录: %s  (来源: %s)" % (d or "(未解析到)", source())
+    return "ComfyUI 目录: %s  (来源: %s)  |  服务: %s (%s)" % (
+        d or "(未解析到)", source(), comfyui_url(), url_source())
 
 
-__all__ = ["comfyui_dir", "output_dir", "source", "report", "CONFIG_PATH"]
+__all__ = ["comfyui_dir", "output_dir", "source", "report", "CONFIG_PATH",
+           "comfyui_url", "url_source", "publish_url", "DEFAULT_URL", "TOOL_DIR"]
 
 if __name__ == "__main__":
     print(report())

@@ -32,6 +32,7 @@ from urllib.error import HTTPError
 import comfy_api as _api
 import png_meta
 from paths import COMFYUI_OUTPUT
+import paths
 
 # ── 配置 ──
 JSON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "json")
@@ -112,7 +113,7 @@ def is_combo_done(task):
 def _submit(prompt_data, timeout=180):
     body = json.dumps(prompt_data).encode("utf-8")
     req = urllib.request.Request(
-        "http://127.0.0.1:8188/prompt", data=body,
+        paths.comfyui_url() + "/prompt", data=body,
         headers={"Content-Type": "application/json"}
     )
     try:
@@ -246,6 +247,8 @@ def main():
     全跑会把历史批次重复生成一遍）。
     指定具体文件：python task_runner.py <任务清单.json>
     """
+    # 同 matrix_viewer：把配置里的地址发布给 comfy_api（命令行单独跑时也要一致）
+    paths.publish_url()
     jdir = JSON_DIR
     skip_done = "--no-skip" not in sys.argv          # 加了 --no-skip 就重跑全部
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
