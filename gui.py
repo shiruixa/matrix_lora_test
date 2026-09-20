@@ -271,6 +271,7 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .fbtn.fall{font-weight:700;opacity:.7;letter-spacing:normal}
 .fbtn.fall.active{opacity:1;background:#3ddc9733;border-color:#3ddc9755;color:#7ff0c0}
 @GEN_CSS@
+@QUEUE_CSS@
 </style>
 </head><body>
 
@@ -279,6 +280,7 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
   <button class="tabbtn active" id="tabbtn-view" onclick="switchTab('view')">网格查看</button>
   <button class="tabbtn" id="tabbtn-sim" onclick="switchTab('sim')">融合诊断</button>
   <button class="tabbtn" id="tabbtn-gen" onclick="switchTab('gen')">新建矩阵</button>
+  <button class="tabbtn" id="tabbtn-queue" onclick="switchTab('queue')">任务队列</button>
   <span id="viewTools" style="display:flex;gap:10px;align-items:center;flex:1;min-width:0">
     <input type="text" id="pathInput" placeholder="矩阵目录（默认 ComfyUI 的 output/matrix）" />
     <button class="btn ghost" onclick="pickFolder()">📂 浏览</button>
@@ -352,6 +354,8 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 
 <div id="tab-gen" class="hidden">@GEN_BODY@</div>
 
+<div id="tab-queue" class="hidden">@QUEUE_BODY@</div>
+
 <div id="modal" class="overlay hidden" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-left">
@@ -369,22 +373,26 @@ function switchTab(name){
   var isView = (name === 'view');
   var isGen  = (name === 'gen');
   var isSim  = (name === 'sim');
+  var isQ    = (name === 'queue');
   document.getElementById('tab-view').classList.toggle('hidden', !isView);
   document.getElementById('tab-gen').classList.toggle('hidden', !isGen);
   document.getElementById('tab-sim').classList.toggle('hidden', !isSim);
+  document.getElementById('tab-queue').classList.toggle('hidden', !isQ);
   document.getElementById('tabbtn-view').classList.toggle('active', isView);
   document.getElementById('tabbtn-gen').classList.toggle('active', isGen);
   document.getElementById('tabbtn-sim').classList.toggle('active', isSim);
+  document.getElementById('tabbtn-queue').classList.toggle('active', isQ);
   document.getElementById('viewTools').style.display = isView ? 'flex' : 'none';
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
   if (isGen && window.genInit) window.genInit();   // 首次切过去时才初始化
   if (isSim) simLoad();
+  if (isQ && typeof qInit === 'function') qInit();
   // 切回网格页：离开期间画布是 display:none，量出来的高度是 0，必须重新量一遍
   if (isView) { layoutGrid(); if (!viewTouched) fitView(); }
 }
 window.addEventListener('DOMContentLoaded', function(){
   var h = (location.hash || '').replace('#', '');
-  if (h === 'view' || h === 'gen' || h === 'sim') switchTab(h);
+  if (h === 'view' || h === 'gen' || h === 'sim' || h === 'queue') switchTab(h);
 });
 
 // ── State ──

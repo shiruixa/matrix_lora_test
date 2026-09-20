@@ -24,7 +24,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 
 import png_meta_read as _pngmeta
 import matrix_generator, paths, task_runner
-import config, gen_tab, gui, jobs, loras
+import config, gen_tab, gui, jobs, loras, queue_tab
 
 # 原来由包 __init__.py 提供，扁平版统一从 paths 拿
 COMFYUI_OUTPUT = paths.COMFYUI_OUTPUT
@@ -77,26 +77,89 @@ def check_nodes(timeout=6):
             "path": path_info}
 
 
-def _list_tasklists():
-    """列出 json/ 下的任务清单，供 UI 选择要跑哪一份（新的在前）。"""
+# 清单列表的短缓存 —— is_combo_done 每条要 batch 次 stat，上千组合就是上千次。
+# 这个接口只在打开「任务队列」页签 / 点刷新时调，不进 1 秒轮询；
+# 再加几秒缓存，重复请求就不会反复 stat。
+_LIST_CACHE = {"t": 0.0, "data": []}
+LIST_CACHE_TTL = 5.0
+
+
+def _bust_list_cache():
+    """删清单、跑完一轮之后要让缓存失效，否则用户会看到过期的完成度。"""
+    _LIST_CACHE["t"] = 0.0
+
+
+def _delete_tasklist(path_or_name):
+    """删一份任务清单。返回 (ok, error)。
+
+    ⚠️ 只认 `json/` 目录下的 .json —— 先取 basename 再拼回 json/，这样
+    `../../x.json`、`D:/x.json`、带分隔符的名字全都被 basename 剥掉，
+    再校验最终路径确实落在 json/ 里（双保险，照 config._safe_preset_name 的思路）。
+
+    **只删清单本身，不动产物** —— 已生成的图在 ComfyUI 的 output 里，那是另一回事。
+    """
+    json_dir = os.path.join(_HERE, "json")
+    base = os.path.basename(str(path_or_name or "").replace("\\", "/").strip())
+    if not base or not base.endswith(".json"):
+        return False, "只能删 json/ 下的 .json 清单"
+    target = os.path.abspath(os.path.join(json_dir, base))
+    if os.path.dirname(target) != os.path.abspath(json_dir):
+        return False, "路径不合法"
+    if not os.path.isfile(target):
+        return False, "清单不存在"
+    try:
+        os.remove(target)
+    except OSError as exc:
+        return False, str(exc)
+    _bust_list_cache()
+    return True, ""
+
+
+def _list_tasklists(max_age=LIST_CACHE_TTL):
+    """列出 json/ 下的任务清单，附**从磁盘推导**的完成度（新的在前）。
+
+    完成度是数出来的，不是记出来的：`task_runner.is_combo_done()` 去看输出目录里
+    存不存在 seed 匹配的 PNG。所以**不需要任何状态文件**，也不会出现
+    「记录说跑完了、其实产物没了」这种脱节。
+    """
+    import time
+    now = time.time()
+    if max_age > 0 and now - _LIST_CACHE["t"] < max_age:
+        return _LIST_CACHE["data"]
+
     d = os.path.join(_HERE, "json")
     out = []
-    if not os.path.isdir(d):
-        return out
-    for f in sorted(os.listdir(d)):
-        if not f.endswith(".json") or f.startswith("example"):
-            continue
-        p = os.path.join(d, f)
-        try:
-            with open(p, encoding="utf-8") as fh:
-                data = json.load(fh)
-            if not isinstance(data, list):
-                continue          # 不是任务清单（比如误放进来的预设），跳过
-            mtime = os.path.getmtime(p)
-        except (json.JSONDecodeError, OSError):
-            continue
-        out.append({"file": p, "name": f, "total": len(data), "mtime": mtime})
+    if os.path.isdir(d):
+        for f in sorted(os.listdir(d)):
+            if not f.endswith(".json") or f.startswith("example"):
+                continue
+            p = os.path.join(d, f)
+            try:
+                with open(p, encoding="utf-8") as fh:
+                    data = json.load(fh)
+                if not isinstance(data, list):
+                    continue      # 不是任务清单（比如误放进来的预设），跳过
+                mtime = os.path.getmtime(p)
+            except (json.JSONDecodeError, OSError):
+                continue
+            total = len(data)
+            try:
+                done = sum(1 for t in data if task_runner.is_combo_done(t))
+            except Exception:
+                done = 0          # 清单格式老旧/缺字段时不至于让整个列表 500
+            # 辨认信息：都从 tasks[0] 现成字段里取，不额外解析
+            first = data[0] if data else {}
+            loras = list((first.get("坐标") or {}).keys())
+            scenes = len({t.get("场景") for t in data})
+            out.append({
+                "file": p, "name": f, "task_name": first.get("任务名") or f,
+                "total": total, "done": done, "mtime": mtime,
+                "state": ("done" if total and done >= total
+                          else "partial" if done else "fresh"),
+                "loras": loras, "scenes": scenes, "seed": first.get("seed"),
+            })
     out.sort(key=lambda x: x["mtime"], reverse=True)
+    _LIST_CACHE.update(t=now, data=out)
     return out
 
 
@@ -318,6 +381,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._handle_run(data)
         elif path == "/api/run/stop":
             self._json({"ok": jobs.request_stop()})
+        elif path == "/api/tasklists/delete":
+            ok, err = _delete_tasklist(data.get("file") or data.get("name") or "")
+            self._json({"ok": ok, "error": err})
         elif path == "/api/presets/save":
             ok, err = config.save_preset(data.get("name", ""), data.get("config") or {})
             self._json({"ok": ok, "error": err})
@@ -355,10 +421,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._json({"ok": False, "error": str(exc)})
 
     def _serve_html(self):
-        # 外壳（gui.HTML，持有唯一的 <style>）+ 生成页签片段
+        # 外壳（gui.HTML，持有唯一的 <style>）+ 各页签片段
+        # 页签拆成独立模块（gen_tab / queue_tab），外壳只留占位符 ——
+        # 加一个页签就是加一个模块 + 两行 replace
         html = (gui.HTML
                 .replace("@GEN_CSS@", gen_tab.CSS)
-                .replace("@GEN_BODY@", gen_tab.BODY))
+                .replace("@GEN_BODY@", gen_tab.BODY)
+                .replace("@QUEUE_CSS@", queue_tab.CSS)
+                .replace("@QUEUE_BODY@", queue_tab.BODY))
         body = html.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -465,8 +535,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _handle_run(self, data):
         """启动后台生图。
 
-        body {"config": {...}} —— 先落盘再跑（生成并执行）
-        body {"file": "..."}   —— 直接跑已有清单
+        body {"config": {...}}   —— 先落盘再跑（生成并执行）
+        body {"file": "..."}     —— 直接跑已有清单（单份）
+        body {"files": [...]}    —— 跑多份，按给定顺序（「任务队列」页签用）
         """
         if not jobs.comfyui_online():
             self._json({"ok": False,
@@ -491,18 +562,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
             total = len(tasks)
             paths = [out_path]
         else:
-            f = str(data.get("file") or "")
-            if not f or not os.path.isfile(f):
-                self._json({"ok": False, "error": "任务清单不存在"})
+            # 多份（任务队列页签）与单份走同一条路 —— jobs.start 本来就吃列表
+            raw = data.get("files")
+            if raw is None:
+                raw = [data.get("file") or ""]
+            wanted = [str(f) for f in raw if str(f).strip()]
+            paths = [f for f in wanted if os.path.isfile(f)]
+            if not paths:
+                self._json({"ok": False, "error": "没有可跑的任务清单（文件不存在？）"})
                 return
-            paths, out_dir, total = [f], "", 0
+            if len(paths) != len(wanted):
+                self._json({"ok": False,
+                            "error": "%d 份清单里有 %d 份找不到" % (len(wanted),
+                                                                  len(wanted) - len(paths))})
+                return
+            out_dir, total = "", 0
 
         ok, err = jobs.start(paths, out_dir=out_dir,
                              skip_done=skip_done, only=only_set)
         if not ok:
             self._json({"ok": False, "error": err})
             return
+        _bust_list_cache()          # 跑起来的清单完成度会变，别让列表显示旧值
         self._json({"ok": True, "total": total, "out_dir": out_dir, "file": paths[0],
+                    "files": paths,
                     "only_count": len(only_set) if only_set else 0,
                     "skip_done": bool(skip_done)})
 

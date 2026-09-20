@@ -48,11 +48,12 @@ def _log(line):
 
 def _worker(paths, skip_done=False, only=None):
     try:
-        for jp in paths:
+        for fi, jp in enumerate(paths, 1):
             tasks = _load_tasks(jp)
             with _LOCK:
                 _JOB["total"] = len(tasks)
                 _JOB["file"] = os.path.basename(jp)
+                _JOB["file_index"] = fi            # 第几份（多份队列时才看得出）
             for idx, task in enumerate(tasks, 1):
                 combo = task.get("组合文件夹", task.get("组合标识", "?"))
                 with _LOCK:
@@ -67,6 +68,7 @@ def _worker(paths, skip_done=False, only=None):
                 if skip_done and task_runner.is_combo_done(task):
                     with _LOCK:
                         _JOB["skipped"] = _JOB.get("skipped", 0) + 1
+                        _JOB["grand_done"] = _JOB.get("grand_done", 0) + 1
                     _log("[%d/%d] %s ⏭ 已完成，跳过" % (idx, len(tasks), combo))
                     continue
 
@@ -79,6 +81,7 @@ def _worker(paths, skip_done=False, only=None):
                     ok, err = 0, "%s: %s" % (type(exc).__name__, exc)
                 with _LOCK:
                     _JOB["ok_images"] = _JOB.get("ok_images", 0) + ok
+                    _JOB["grand_done"] = _JOB.get("grand_done", 0) + 1
                     if not ok:
                         _JOB["fail"] = _JOB.get("fail", 0) + 1
                 _log("[%d/%d] %s 异常: %s" % (idx, len(tasks), combo, err) if err
@@ -94,9 +97,23 @@ def _worker(paths, skip_done=False, only=None):
 def start(paths, out_dir="", skip_done=True, only=None):
     """启动后台执行。返回 (ok: bool, error: str)。
 
+    paths     —— 一份或多份任务清单，**按给定顺序**依次跑
     skip_done —— 跳过磁盘上已跑完的组合（断点续跑，默认开）
     only      —— 只跑这些组合（键由 task_key() 生成）；None = 全跑
     """
+    paths = list(paths)
+    # 队列级进度：每份多少组合，先数好 —— 清单不大，读一遍 len 而已。
+    # 主进度条用 grand_done/grand_total，多份时才看得出「整体还剩多少」；
+    # index/total 仍表示**当前这一份**内的进度，两者互补。
+    queue, grand = [], 0
+    for jp in paths:
+        try:
+            n = len(_load_tasks(jp))
+        except Exception:
+            n = 0
+        queue.append({"name": os.path.basename(jp), "total": n})
+        grand += n
+
     with _LOCK:
         if _JOB.get("state") == "running":
             return False, "已有任务在运行"
@@ -104,9 +121,11 @@ def start(paths, out_dir="", skip_done=True, only=None):
         _JOB.update(state="running", stop=False, index=0, total=0, combo="",
                     ok_images=0, fail=0, skipped=0, log=[], started=time.time(),
                     out_dir=out_dir, error="", file="",
+                    queue=queue, file_index=0, file_total=len(paths),
+                    grand_done=0, grand_total=grand,
                     skip_done=bool(skip_done), only_count=(len(only) if only else 0))
     threading.Thread(target=_worker,
-                     args=(list(paths), bool(skip_done), only),
+                     args=(paths, bool(skip_done), only),
                      daemon=True).start()
     return True, ""
 
