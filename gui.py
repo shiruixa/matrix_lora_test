@@ -1213,6 +1213,10 @@ function layoutGrid(){
 function fitView(){
   var g = document.getElementById("grid"), wrap = document.getElementById("canvasWrap");
   if (!g || !wrap) return;
+  // 空状态（没有格子）**不缩放** —— 那时 grid 里只有一行提示文字，
+  // 「把它缩放到刚好放下」算出来的倍率可能很大（画布相对提示很高时，
+  // k 能顶到 6 的上限），文字被放大到超出画布反被裁掉。原始尺寸最合适。
+  if (!g.querySelector(".cellbox")) { resetView(); return }
   var w = wrap.clientWidth, h = wrap.clientHeight;
   var gw = g.scrollWidth, gh = g.scrollHeight;
   if (!gw || !gh || !w || !h) return;
