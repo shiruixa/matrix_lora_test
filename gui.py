@@ -161,7 +161,12 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 }
 
 /* ── 网格 ── */
-.grid-wrap{padding:0;overflow:hidden;max-height:var(--grid-h,calc(100vh - 175px));display:flex;flex-direction:column}
+/* 用 height 而不是 max-height —— 让画布**铺满**可用高度。
+   早先用 max-height 时容器按内容收缩：空目录下画布只有一行提示那么高（约 300px），
+   下面露出一大片页面底色，看着像被谁盖住了（用户截图反馈）。
+   配合 #canvasWrap 的 min-height:0，画布拿到的是**真实**高度，
+   fitView() 量到的 clientHeight 也就准了 —— 不会重演「按 520 去缩放、底部被裁」。 */
+.grid-wrap{padding:0;overflow:hidden;height:var(--grid-h,calc(100vh - 175px));display:flex;flex-direction:column}
 /* 可缩放画布：滚轮缩放、空白处拖拽平移（像 CAD / 白板） */
 /* ⚠️ min-height 必须是 0 —— 早先写死 520px，矮窗口下画布被撑到 520 而父容器只给
    两百多，clientHeight 谎报 520 → fitView() 按 520 缩放居中，多出来的部分被
@@ -170,6 +175,10 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
   background-image:radial-gradient(circle at 1px 1px, rgba(255,255,255,.05) 1px, transparent 0);
   background-size:22px 22px}
 #canvasWrap.dragging{cursor:grabbing}
+/* 空状态（没找到 task.json / 加载失败）：提示居中显示。
+   画布现在铺满整屏，不居中的话那行字会孤零零挂在顶上。 */
+#canvasWrap.empty{display:flex;align-items:center;justify-content:center}
+#canvasWrap.empty #grid{transform:none !important}
 /* 内容超出画布时的提示角标。
    为什么需要它：画面是 transform 缩放的，**溢出内容不会产生滚动条**，
    overflow:hidden 一裁就没了。用户滚轮放大后底部看不见，又不知道该按什么
@@ -1179,7 +1188,9 @@ function updateFitHint(){
   if (!g || !wrap || !h || !wrap.clientWidth || !wrap.clientHeight) return;
   // 没有格子就没有「超出画布」可言。空状态（没找到 task.json / 加载失败）时角标必须消失 ——
   // 这条路径**不会**调 applyView，没人去关它，就会把上一次的状态残留下来压在空画布上。
-  if (!g.querySelector(".cellbox")) { h.classList.add("hidden"); return }
+  var empty = !g.querySelector(".cellbox");
+  wrap.classList.toggle("empty", empty);   // 空状态让提示居中（见 CSS）
+  if (empty) { h.classList.add("hidden"); return }
   var over = g.scrollWidth * view.k > wrap.clientWidth + 1 ||
              g.scrollHeight * view.k > wrap.clientHeight + 1;
   h.classList.toggle("hidden", !over);
@@ -1207,7 +1218,8 @@ function layoutGrid(){
   var wrap = document.querySelector('.grid-wrap');
   if (!wrap) return;
   var top = wrap.getBoundingClientRect().top + window.pageYOffset;
-  wrap.style.maxHeight = Math.max(180, window.innerHeight - top - 12) + 'px';
+  // 设 height（不是 maxHeight）—— 让画布铺满到底，别按内容收缩留一大片空
+  wrap.style.height = Math.max(180, window.innerHeight - top - 12) + 'px';
 }
 
 function fitView(){
