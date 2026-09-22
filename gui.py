@@ -530,6 +530,7 @@ function loadTasks() {
   var grid = document.getElementById("grid");
   sp.classList.remove("hidden");
   grid.innerHTML = "";
+  updateFitHint();     // 清空了网格 → 角标也该收起来（这几条路径不走 applyView）
   document.getElementById("taskInfo").textContent = "加载中…";
   saveConfig({last_folder: folder});
 
@@ -558,6 +559,7 @@ function loadTasks() {
         document.getElementById("controlsArea").classList.add("hidden");
         document.getElementById("filtersArea").classList.add("hidden");
         grid.innerHTML = '<div class="hint">这个目录里没有找到 task.json<br><span style="color:var(--dim-2)">' + escHtml(shown) + '</span></div>';
+        updateFitHint();     // 空目录 → 角标必须消失（否则残留上一次的状态）
         return;
       }
       initControls();
@@ -589,6 +591,7 @@ function loadTasks() {
              + '② 它已经被关掉 → 刷新也没用，得重新运行 <b>matrix_viewer.py</b></span>'
            : '加载失败：' + escHtml(raw))
         + '</div>';
+      updateFitHint();
     });
 }
 
@@ -1170,6 +1173,9 @@ function updateFitHint(){
   var g = document.getElementById("grid"), wrap = document.getElementById("canvasWrap");
   var h = document.getElementById("fitHint");
   if (!g || !wrap || !h || !wrap.clientWidth || !wrap.clientHeight) return;
+  // 没有格子就没有「超出画布」可言。空状态（没找到 task.json / 加载失败）时角标必须消失 ——
+  // 这条路径**不会**调 applyView，没人去关它，就会把上一次的状态残留下来压在空画布上。
+  if (!g.querySelector(".cellbox")) { h.classList.add("hidden"); return }
   var over = g.scrollWidth * view.k > wrap.clientWidth + 1 ||
              g.scrollHeight * view.k > wrap.clientHeight + 1;
   h.classList.toggle("hidden", !over);
