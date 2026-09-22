@@ -530,7 +530,8 @@ function loadTasks() {
   var grid = document.getElementById("grid");
   sp.classList.remove("hidden");
   grid.innerHTML = "";
-  updateFitHint();     // 清空了网格 → 角标也该收起来（这几条路径不走 applyView）
+  resetView();     // 清空网格时把视图也归零 —— 否则 #grid 会带着上一次的
+                   // transform（平移/缩放）渲染新内容，文字被画布裁掉
   document.getElementById("taskInfo").textContent = "加载中…";
   saveConfig({last_folder: folder});
 
@@ -559,7 +560,10 @@ function loadTasks() {
         document.getElementById("controlsArea").classList.add("hidden");
         document.getElementById("filtersArea").classList.add("hidden");
         grid.innerHTML = '<div class="hint">这个目录里没有找到 task.json<br><span style="color:var(--dim-2)">' + escHtml(shown) + '</span></div>';
-        updateFitHint();     // 空目录 → 角标必须消失（否则残留上一次的状态）
+        // 这条路径**不走 applyView**，所以必须显式归零视图：
+        // 否则 #grid 保留着上一次看有内容矩阵时的 translate/scale，
+        // 提示文字会带着旧变换渲染，被画布从中间裁掉（用户截图反馈过）。
+        resetView();
         return;
       }
       initControls();
@@ -591,7 +595,7 @@ function loadTasks() {
              + '② 它已经被关掉 → 刷新也没用，得重新运行 <b>matrix_viewer.py</b></span>'
            : '加载失败：' + escHtml(raw))
         + '</div>';
-      updateFitHint();
+      resetView();
     });
 }
 
