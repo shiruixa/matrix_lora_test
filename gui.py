@@ -179,6 +179,21 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
   padding:7px 12px;font-size:11.5px;color:var(--dim);pointer-events:none;
   box-shadow:0 6px 20px #0007}
 .fit-hint b{color:#ffd166;font-weight:600}
+
+/* 快捷目录 —— 工具要看的目录几乎总在 ComfyUI 的 output/matrix 底下，
+   直接列出来点选：比文件夹对话框少好几步，而且**不依赖 tkinter**
+   （便携版的 python_embeded 没有它，弹不出对话框）。
+   :empty 隐藏，免得没内容时留一条空隙。 */
+.quickdirs{display:flex;gap:6px;flex-wrap:wrap;align-items:center;
+  padding:10px 18px 0;font-size:11.5px}
+.quickdirs:empty{display:none;padding:0}
+.qd-label{color:var(--dim-2);margin-right:2px}
+.qd-chip{background:var(--panel);border:1px solid var(--line);border-radius:20px;
+  padding:3px 11px;color:var(--dim);cursor:pointer;transition:background .14s,border-color .14s;
+  white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis}
+.qd-chip:hover{background:var(--panel-2);border-color:var(--line-2);color:var(--txt)}
+.qd-chip.on{background:#7c5cff22;border-color:#7c5cff66;color:#c3b6ff}
+.qd-chip.dim{opacity:.45}
 #grid{transform-origin:0 0;will-change:transform;display:inline-block;padding:20px}
 .grid-table{border-collapse:separate;border-spacing:0;margin:0 auto}
 .grid-table th{
@@ -283,13 +298,14 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
   <button class="tabbtn" id="tabbtn-queue" onclick="switchTab('queue')">任务队列</button>
   <span id="viewTools" style="display:flex;gap:10px;align-items:center;flex:1;min-width:0">
     <input type="text" id="pathInput" placeholder="矩阵目录（默认 ComfyUI 的 output/matrix）" />
-    <button class="btn ghost" onclick="pickFolder()">📂 浏览</button>
+    <button class="btn ghost" id="browseBtn" onclick="pickFolder()">📂 浏览</button>
     <button class="btn" onclick="loadTasks()">⟳ 加载</button>
     <span id="taskInfo" style="font-size:11px;color:var(--dim);white-space:nowrap"></span>
   </span>
 </div>
 
 <div id="tab-view">
+<div id="quickFolders" class="quickdirs"></div>
 <div id="controlsArea" class="toolbar hidden">
   <div class="ctrl">
     <label>横轴</label><span class="axis-tag x">X</span>
@@ -332,7 +348,7 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
   <div id="spinner" class="spinner hidden"></div>
   <div id="canvasWrap">
     <div id="grid">
-      <div class="hint">选一个矩阵目录，或点 <b>📂 浏览</b><br>默认目录 = ComfyUI 的 <b>output/matrix</b></div>
+      <div class="hint">选一个矩阵目录 —— 点上方<b>快捷目录</b>里的 <b>📁 output/matrix</b> 即可<br>默认目录 = ComfyUI 的 <b>output/matrix</b>，也可以直接把路径粘到输入框里回车</div>
     </div>
     <div id="fitHint" class="fit-hint hidden">内容超出画布 · <b>⌖ 适应</b> 缩到一屏，或滚轮缩小、<b>中键拖动</b>平移</div>
   </div>
@@ -408,6 +424,7 @@ var facetDim = null;      // facet 模式下当分面的维度名
 
 // ── Init ──
 document.addEventListener("DOMContentLoaded", function() {
+  loadQuickFolders();      // 顶部那排快捷目录（并据 has_tk 决定藏不藏「浏览」按钮）
   fetch("/api/config").then(r => r.json()).then(cfg => {
     if (cfg.last_folder) {
       document.getElementById("pathInput").value = cfg.last_folder;
@@ -445,6 +462,49 @@ function saveConfig(partial) {
 }
 
 // ── Folder picker ──
+// ── 快捷目录 ────────────────────────────────────────────────────────────
+// 工具要看的目录几乎总在 ComfyUI 的 output/matrix 下，直接列出来点选。
+//
+// 为什么不用文件夹对话框：**ComfyUI 便携版的 python_embeded 不含 tkinter**，
+// 弹不出来；那个「📂 浏览」按钮在便携版下点了只会弹一句「请手填路径」——
+// 对给别人用的工具来说不合格。所以没有 tkinter 时干脆把按钮藏掉（不留死按钮），
+// 靠这里的候选目录覆盖绝大多数场景；路径还是可以手粘。
+function loadQuickFolders(){
+  api('GET','/api/matrix-folders').then(function(d){
+    var box = document.getElementById('quickFolders');
+    if (!box) return;
+    var bb = document.getElementById('browseBtn');
+    if (bb) bb.style.display = (d && d.has_tk) ? '' : 'none';
+
+    var cur = document.getElementById('pathInput').value;
+    var h = '';
+    if (d && d.exists) {
+      h += '<span class="qd-label">快捷目录</span>';
+      h += qdChip(d.root, '📁 output/matrix', false, cur);
+      (d.dirs || []).forEach(function(x){
+        h += qdChip(x.path, x.name, !x.has_tasks, cur);
+      });
+    } else if (d && d.root) {
+      h += '<span class="qd-label">找不到 ' + esc(d.root)
+         + ' —— 先在 config.json 里配好 ComfyUI 路径</span>';
+    }
+    box.innerHTML = h;
+  }).catch(function(){});   // 拿不到就不显示，不打扰
+}
+
+function qdChip(path, label, dim, cur){
+  var on = (path === cur) ? ' on' : '';
+  return '<span class="qd-chip' + (dim ? ' dim' : '') + on + '"'
+       + ' title="' + escAttr(path) + '"'
+       + ' onclick="pickQuick(' + escAttr(JSON.stringify(path)) + ')">'
+       + esc(label) + '</span>';
+}
+
+function pickQuick(p){
+  document.getElementById('pathInput').value = p;
+  loadTasks();
+}
+
 function pickFolder() {
   fetch("/api/pick-folder").then(r => r.json()).then(function(data) {
     if (data.path) {
@@ -515,7 +575,17 @@ function loadTasks() {
     })
     .catch(function(err) {
       sp.classList.add("hidden");
-      grid.innerHTML = '<div class="hint" style="color:var(--hot)">加载失败：' + escHtml(err.message) + '</div>';
+      // 浏览器的原始文案是英文 "Failed to fetch"，而且不说该怎么办 ——
+      // 这通常意味着查看器服务被重启/关掉了（改了代码重启、或手动关的），
+      // 页面还是旧的那一份，所以请求全失败。给一句能照做的中文。
+      var raw = (err && err.message) || String(err);
+      var down = /Failed to fetch|NetworkError|load failed/i.test(raw);
+      grid.innerHTML = '<div class="hint" style="color:var(--hot)">'
+        + (down
+           ? '连不上查看器服务<br><span style="color:var(--dim)">'
+             + '通常是它被重启或关掉了 —— 按 <b>Ctrl+R</b> 刷新页面即可</span>'
+           : '加载失败：' + escHtml(raw))
+        + '</div>';
     });
 }
 

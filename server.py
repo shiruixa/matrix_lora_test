@@ -89,6 +89,41 @@ def _bust_list_cache():
     _LIST_CACHE["t"] = 0.0
 
 
+def _matrix_folders():
+    """快速选择用的候选目录：ComfyUI 的 `output/matrix` 根 + 它下面的任务目录。
+
+    为什么不用通用文件夹对话框：**ComfyUI 便携版的 python_embeded 不含 tkinter**，
+    弹不出来；而这个工具要看的目录几乎总在 `output/matrix` 底下，工具自己就知道
+    那个路径。与其让用户手粘路径，不如把候选直接列出来 —— 点一下即加载，
+    而且完全不依赖 tkinter。
+    """
+    root = (os.path.join(COMFYUI_OUTPUT.replace("/", os.sep), "matrix")
+            if COMFYUI_OUTPUT else "")
+    out = {"root": root, "exists": bool(root) and os.path.isdir(root), "dirs": [],
+           "has_tk": _HAS_TK}
+    if not out["exists"]:
+        return out
+    try:
+        names = os.listdir(root)
+    except OSError:
+        return out
+    for name in names:
+        p = os.path.join(root, name)
+        if not os.path.isdir(p):
+            continue
+        try:
+            mtime = os.path.getmtime(p)
+            # 是不是任务目录 —— _resolve_folder 认的就是「含 *.task.json」
+            has_tasks = any(f.endswith(".task.json") for f in os.listdir(p))
+        except OSError:
+            continue
+        out["dirs"].append({"path": p, "name": name, "mtime": mtime,
+                            "has_tasks": has_tasks})
+    # 新的在前（刚跑完的那批通常就是你要看的）
+    out["dirs"].sort(key=lambda d: d["mtime"], reverse=True)
+    return out
+
+
 def _delete_tasklist(path_or_name):
     """删一份任务清单。返回 (ok, error)。
 
@@ -317,6 +352,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._serve_file(params)
         elif path == "/api/pick-folder":
             self._json({"path": _pick_folder(), "has_tk": _HAS_TK})
+        elif path == "/api/matrix-folders":
+            self._json(_matrix_folders())
         elif path == "/api/config":
             self._json(config.load())
         elif path == "/api/metadata":
