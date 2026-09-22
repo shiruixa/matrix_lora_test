@@ -580,10 +580,13 @@ function loadTasks() {
       // 页面还是旧的那一份，所以请求全失败。给一句能照做的中文。
       var raw = (err && err.message) || String(err);
       var down = /Failed to fetch|NetworkError|load failed/i.test(raw);
+      // 两种原因要分开说 —— 之前只写「刷新即可」，可服务真被关掉时刷新多少次都一样，
+      // 用户会卡在一个没有出口的循环里（实测撞到过）。
       grid.innerHTML = '<div class="hint" style="color:var(--hot)">'
         + (down
            ? '连不上查看器服务<br><span style="color:var(--dim)">'
-             + '通常是它被重启或关掉了 —— 按 <b>Ctrl+R</b> 刷新页面即可</span>'
+             + '① 它刚被重启 → 按 <b>Ctrl+R</b> 刷新即可<br>'
+             + '② 它已经被关掉 → 刷新也没用，得重新运行 <b>matrix_viewer.py</b></span>'
            : '加载失败：' + escHtml(raw))
         + '</div>';
     });
