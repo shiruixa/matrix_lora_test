@@ -161,11 +161,12 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 }
 
 /* ── 网格 ── */
-/* 用 height 而不是 max-height —— 让画布**铺满**可用高度。
-   早先用 max-height 时容器按内容收缩：空目录下画布只有一行提示那么高（约 300px），
-   下面露出一大片页面底色，看着像被谁盖住了（用户截图反馈）。
-   配合 #canvasWrap 的 min-height:0，画布拿到的是**真实**高度，
-   fitView() 量到的 clientHeight 也就准了 —— 不会重演「按 520 去缩放、底部被裁」。 */
+/* ⚠️⚠️ 这里必须是 height，**不能改回 max-height** —— 这个坑复发过两次。
+   max-height 会让容器**按内容收缩**：空目录下画布只剩一行提示那么高（~300px），
+   下面露出整片页面底色（--bg #0b0d1a），用户看到的就是「画布没铺下去 / 像被盖住了」。
+   配合 #canvasWrap{min-height:0}，height 让画布拿到**真实**高度，
+   fitView() 量到的 clientHeight 也就准 —— 不会重演「按 520 缩放、底部被裁」。
+   改完请跑 `node agent_tool/layout_check.mjs` 自查。 */
 .grid-wrap{padding:0;overflow:hidden;height:var(--grid-h,calc(100vh - 175px));display:flex;flex-direction:column}
 /* 可缩放画布：滚轮缩放、空白处拖拽平移（像 CAD / 白板） */
 /* ⚠️ min-height 必须是 0 —— 早先写死 520px，矮窗口下画布被撑到 520 而父容器只给
@@ -1218,7 +1219,7 @@ function layoutGrid(){
   var wrap = document.querySelector('.grid-wrap');
   if (!wrap) return;
   var top = wrap.getBoundingClientRect().top + window.pageYOffset;
-  // 设 height（不是 maxHeight）—— 让画布铺满到底，别按内容收缩留一大片空
+  // ⚠️ 设 height，**不是 maxHeight** —— 见 .grid-wrap 那条注释，改错会让画布缩成一小块
   wrap.style.height = Math.max(180, window.innerHeight - top - 12) + 'px';
 }
 
