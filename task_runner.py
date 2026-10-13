@@ -35,7 +35,7 @@ from paths import COMFYUI_OUTPUT
 import paths
 
 # ── 配置 ──
-JSON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "json")
+JSON_DIR = os.path.join(paths.data_dir(), "json")
 
 # 基于 通用测试.json 的 node_id，硬编码
 NODE_KSAMPLER = "7"          # KSamplerAdvanced
@@ -49,7 +49,7 @@ NODE_LORA = "13"             # Power Lora Loader (rgthree)
 NODE_VAE = "1"               # VAELoader
 NODE_CLIP = "3"              # CLIPLoader
 
-WORKFLOW_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workflow.json")
+WORKFLOW_PATH = os.path.join(paths.data_dir(), "workflow.json")
 
 
 def _make_safe(name, maxlen=90):
@@ -252,9 +252,13 @@ def main():
     jdir = JSON_DIR
     skip_done = "--no-skip" not in sys.argv          # 加了 --no-skip 就重跑全部
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    if args:
-        paths = [args[0]]
-    else:
+    # ⚠️ 这个列表**不能叫 `paths`** —— 上面第 251 行用的是顶部 `import paths` 那个模块。
+    #    函数里只要有 `paths = ...` 赋值，`paths` 在**整个 main() 作用域**就变成局部变量，
+    #    于是第 251 行读到未赋值的名字 → UnboundLocalError: local variable 'paths'。
+    #    表现：`python task_runner.py` 一启动就崩，命令行这条路整个是死的
+    #    （只有 UI 走 _run_task，所以长期没被发现）。2026-10-13 审查发现。
+    files = [args[0]] if args else []
+    if not files:
         # json/ 是运行时产物，全新克隆里还不存在 —— 直接 listdir 会 FileNotFoundError
         names = os.listdir(jdir) if os.path.isdir(jdir) else []
         candidates = sorted(
@@ -266,14 +270,14 @@ def main():
             print(f"没有任务清单 (json 目录: {jdir})")
             print("先用生成器产出一份：python matrix_generator.py example_config.json")
             return
-        paths = [candidates[-1]]   # 只跑最新那份
+        files = [candidates[-1]]   # 只跑最新那份
         if len(candidates) > 1:
-            print(f"json/ 下有 {len(candidates)} 份任务清单，只跑最新的：{os.path.basename(paths[0])}")
+            print(f"json/ 下有 {len(candidates)} 份任务清单，只跑最新的：{os.path.basename(files[0])}")
             print(f"（要跑别的：python task_runner.py <文件路径>）")
 
     total_ok = 0
     skipped = 0
-    for jp in paths:
+    for jp in files:
         print(f"\n=== {os.path.basename(jp)} ===")
         with open(jp, encoding="utf-8") as f:
             tasks = json.load(f)

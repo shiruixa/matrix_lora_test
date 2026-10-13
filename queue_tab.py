@@ -104,11 +104,8 @@ function qMsg(m, kind){
   e.textContent = m || '';
 }
 
-function qFmtTime(ts){
-  var d = new Date(ts * 1000);
-  var p = function(n){ return (n < 10 ? '0' : '') + n };
-  return (d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
-}
+// 实现已收敛到内核的 fmtTime（gui.py）。队列清单都是当天的，所以不带年份。
+function qFmtTime(ts){ return fmtTime(ts, 'mdhm') }
 
 var Q_STATE = {
   done:    { cls: 'done',    txt: '✓ 已完成' },
@@ -146,7 +143,8 @@ function qRender(){
        +      esc(st.txt) + '</div>'
        +   '<div class="mono" style="color:var(--dim-2)">' + qFmtTime(it.mtime) + '</div>'
        +   '<div><button class="q-del" title="只删清单，不动已生成的图" '
-       +        'onclick="qDelete(\'' + escAttr(it.file) + '\')">🗑</button></div>'
+       +        'data-file="' + escAttr(it.file) + '" '
+       +        'onclick="qDelete(this.dataset.file)">🗑</button></div>'
        + '</div>';
   });
   box.innerHTML = h;

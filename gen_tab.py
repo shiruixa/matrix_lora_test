@@ -339,8 +339,7 @@ var genPickerTarget = null, genTimer = null, genPollTimer = null;
 function gv(id){var e=document.getElementById(id);return e?e.value:''}
 function gi(id,d){var n=parseInt(gv(id));return isNaN(n)?d:n}
 function gf(id,d){var n=parseFloat(gv(id));return isNaN(n)?d:n}
-function gstamp(){var d=new Date(),p=function(n){return ('0'+n).slice(-2)};
-  return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes())}
+function gstamp(){ return fmtTime(null, 'compact') }   // 见 gui.py 的 fmtTime
 function gRoll(){return Math.floor(Math.random()*2147483646)+1}
 
 // ══ 初始化（外壳的 switchTab 首次切到本页时调用）══
@@ -995,12 +994,9 @@ function genLoadPresets(){
   });
 }
 
-function genFmtTime(ts){
-  if(!ts) return "";
-  var d = new Date(ts * 1000), p = function(n){ return ('0'+n).slice(-2) };
-  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate())
-       + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
-}
+// 实现已收敛到内核的 fmtTime（gui.py）—— 三份副本合一。
+// 空值仍返回空串（原来就是），别改成返回当前时间。
+function genFmtTime(ts){ return ts ? fmtTime(ts, 'ymdhm') : "" }
 
 function genRenderPresets(){
   var box = document.getElementById("gpr-list");

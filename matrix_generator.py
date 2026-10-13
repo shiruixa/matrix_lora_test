@@ -25,6 +25,11 @@ import os
 import random
 from datetime import datetime
 
+# 只为 data_dir()（任务清单默认落点）—— paths 不 import 任何本地模块，无循环。
+# 本模块原本「零兄弟依赖」，为这一处破例：自己复刻一遍 sys.frozen 判断
+# 迟早和 paths 里的那份漂移。
+import paths
+
 
 def _parse_strength(val):
     """强度配置：数字、数组或 {最小,最大,段数} → 列表"""
@@ -170,7 +175,36 @@ def generate_tasks(cfg):
                 task["vae_name"] = vae_name
             tasks.append(task)
 
+    _disambiguate_folders(tasks)
     return tasks, task_name
+
+
+def _disambiguate_folders(tasks):
+    """把**真撞了**的「组合文件夹」名加短哈希区分开。
+
+    为什么会撞：文件夹名用 `%.3g` 压缩强度（`0.3333` 与 `0.3334` 都成 `0.333`，
+    `1.0001` 也成 `1`），而 task_runner 的 `_make_safe` 又把 `A B` / `A_B` / `A+B`
+    统一映射成 `A_B`。两条**不同**组合拿到同一个名字 → `{组合}.task.json` 与
+    `{组合}_{种子}.png` 写到同一路径 → **后跑的静默覆盖先跑的，不报任何错**，
+    查看器看到的图比配置的少。
+
+    ⚠️ **只在真碰撞时才改名**：常规配置的文件夹名一个字不变，已有图片的断点续跑
+    照常工作。改命名规则会让旧图全部不被识别（`is_combo_done` 按文件夹名匹配），
+    那种代价不该由没撞的人承担。
+
+    哈希基于「组合标识」（完整、含全部维度），所以同一份配置每次生成的名字一致。
+    """
+    import hashlib
+    by_folder = {}
+    for t in tasks:
+        by_folder.setdefault(t["组合文件夹"], set()).add(t["组合标识"])
+    clash = {f for f, labels in by_folder.items() if len(labels) > 1}
+    if not clash:
+        return
+    for t in tasks:
+        if t["组合文件夹"] in clash:
+            h = hashlib.md5(t["组合标识"].encode("utf-8")).hexdigest()[:6]
+            t["组合文件夹"] = "%s_%s" % (t["组合文件夹"], h)
 
 
 def write_tasks(cfg, out_dir=None):
@@ -180,7 +214,7 @@ def write_tasks(cfg, out_dir=None):
     否则 task_runner 的「取 json/ 下最新一份」启发式会失准。
     """
     tasks, task_name = generate_tasks(cfg)
-    out_dir = out_dir or os.path.join(os.path.dirname(os.path.abspath(__file__)), "json")
+    out_dir = out_dir or os.path.join(paths.data_dir(), "json")
     os.makedirs(out_dir, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_path = os.path.join(out_dir, f"{task_name}_{ts}.json")

@@ -25,9 +25,60 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 import png_meta_read as _pngmeta
 import matrix_generator, paths, task_runner
 import config, gen_tab, gui, jobs, loras, queue_tab
+import plugin_loader
+
+# ── 插件 ────────────────────────────────────────────────────────────────
+# 启动时扫一次 plugins/。**内核不 import 插件里的任何模块** —— 插件目录
+# 整个删掉也不影响这里，只是页签少几个、路由少几条。
+#
+# 未启用的插件（缺依赖 / 导入失败）也会出现在 PLUGINS 里，但 enabled=False、
+# 没有路由，BODY 是「未启用」提示 —— 页签照常显示，用户能看懂少了什么。
+PLUGINS = plugin_loader.discover()
+PLUGIN_ROUTES = plugin_loader.collect_routes(PLUGINS)
 
 # 原来由包 __init__.py 提供，扁平版统一从 paths 拿
 COMFYUI_OUTPUT = paths.COMFYUI_OUTPUT
+
+# ── 退出钩子 ────────────────────────────────────────────────────────────
+# 打成 exe 后是 `--windowed`（没有控制台窗口），于是**用户没有任何办法关掉它**：
+# 浏览器标签一关，进程还在后台占着端口；再双击一次就变成两个实例（端口顺延）。
+# 网页上那个「退出」按钮走这里。
+#
+# 用回调而不是在这里直接退出：本模块不该知道服务是怎么起的（可能在测试里、
+# 也可能是别的宿主）。matrix_viewer 启动时把自己那套关停逻辑挂进来。
+_shutdown_hook = None
+
+
+def set_shutdown_hook(fn):
+    """由入口（matrix_viewer）注册「怎么关掉自己」。"""
+    global _shutdown_hook
+    _shutdown_hook = fn
+
+
+def _refresh_comfyui_paths():
+    """切换 ComfyUI 之后，把散落各处的 COMFYUI_OUTPUT **副本**一起更新。
+
+    ⚠️ 为什么必须做：`from paths import COMFYUI_OUTPUT` 拷的是**值**不是引用
+    （config.py / task_runner.py / 本模块各存了一份）。不刷新它们的话，
+    界面上切了实例、实际落盘还写在老地方的 output 里 —— 一个「点了没反应」
+    的假切换。**刷新点就这一处，别在别的地方再判断。**
+
+    返回新的 output 目录（可能为空 = 新实例没自报路径）。
+    """
+    global COMFYUI_OUTPUT
+    new = paths.output_dir()
+    paths.COMFYUI_OUTPUT = new
+    COMFYUI_OUTPUT = new
+    try:
+        task_runner.COMFYUI_OUTPUT = new
+    except Exception:
+        pass
+    try:
+        config.DEFAULT_FOLDER = (os.path.join(new.replace("/", os.sep), "matrix")
+                                 if new else "")
+    except Exception:
+        pass
+    return new
 
 
 def _log(msg):
@@ -340,11 +391,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
+    # ── 给插件的后端接口 ──────────────────────────────────────────────────
+    # 插件不该 `import server`（循环导入：server → plugin_loader → 插件），
+    # 也不该自己重写一套目录扫描。这两个是模块级函数的直通，
+    # 让插件的路由 handler 能直接拿到任务清单 —— 见 plugins/analysis/__init__.py。
+    resolve_folder = staticmethod(_resolve_folder)
+    scan_tasks = staticmethod(_scan_tasks)
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         params = urllib.parse.parse_qs(parsed.query)
         _log(f"GET {path}")
+
+        # 插件路由优先查表。插件被卸载 / 未启用时这里自然查不到，
+        # 请求会落到下面的 else —— 也就是「这个接口没了」。
+        _plugin_fn = PLUGIN_ROUTES.get(path)
+        if _plugin_fn is not None:
+            try:
+                _plugin_fn(self, params)
+            except Exception as exc:
+                _log(f"plugin route {path} 出错: {type(exc).__name__}: {exc}")
+                self._json({"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
+            return
 
         if path == "/api/tasks":
             self._handle_tasks(params)
@@ -389,12 +458,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._json({"ok": True, "files": config.list_presets()})
         elif path == "/api/presets/load":
             self._json(config.load_preset(params.get("name", [""])[0]))
+        elif path == "/api/comfyui":
+            self._handle_comfyui(params)
         elif path == "/api/example-config":
             self._handle_example_config()
-        elif path == "/api/similarity":
-            self._handle_similarity(params)
         else:
-            self._serve_html()
+            # 未命中的 /api/* 返回 404，而不是把首页 HTML 塞回去 ——
+            # 插件卸载后前端调 /api/similarity 能立刻看出「这个接口没了」，
+            # 而不是拿到一坨 HTML 去 JSON.parse（报错信息会难看懂得多）。
+            if path.startswith("/api/"):
+                self._json({"ok": False, "error": "no such endpoint: " + path}, 404)
+            else:
+                self._serve_html()
 
     def do_POST(self):
         content_len = int(self.headers.get("Content-Length", 0))
@@ -407,7 +482,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = parsed.path
         _log(f"POST {path}")
 
-        if path == "/api/save-config":
+        if path == "/api/quit":
+            self._handle_quit(data)
+        elif path == "/api/comfyui":
+            self._handle_comfyui_switch(data)
+        elif path == "/api/save-config":
             config.save(data)
             self._json({"ok": True})
         elif path == "/api/generate-preview":
@@ -429,24 +508,62 @@ class Handler(http.server.BaseHTTPRequestHandler):
         else:
             self._json({"error": "not found"})
 
-    def _handle_similarity(self, params):
-        """图片视觉相似度散点数据（颜色/纹理特征 → PCA 2D）。
+    def _handle_quit(self, data):
+        """网页上的「退出」按钮 —— 关掉工具本身。
 
-        每次请求现算 —— 百来张图不到一秒，不值得加缓存（还会带来失效问题）。
+        ⚠️ **必须先回响应再关停**：`shutdown()` 会让 `serve_forever()` 返回、
+        进程随即退出；如果先关停，这个响应还没写出去连接就断了，浏览器会显示
+        「连接被重置」，用户以为点坏了。
+
+        关停放在**另一个线程**里：本函数就跑在 server 的线程池里，
+        在它自己身上调 shutdown() 会死等（shutdown 等的是「所有 handler 返回」）。
         """
-        folder = params.get("folder", [""])[0]
-        if not folder or not os.path.isdir(folder):
-            self._json({"ok": False, "error": "invalid folder"})
+        import threading
+        if _shutdown_hook is None:
+            self._json({"ok": False, "error": "当前不是由 matrix_viewer 启动的，没有退出钩子"})
             return
-        resolved = _resolve_folder(folder)
-        tasks, _dims = _scan_tasks(resolved)
-        try:
-            import similarity
-            r = similarity.similarity_map(tasks)
-        except Exception as exc:
-            self._json({"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
+        self._json({"ok": True})
+        threading.Thread(target=_shutdown_hook, daemon=True).start()
+
+    def _handle_comfyui(self, params):
+        """当前连的 ComfyUI + 扫到的全部实例。
+
+        多便携版并存时，「连的是哪一台」必须让用户看得见、能换 ——
+        否则他只会看到「LoRA 列表怎么不对」而不知道连错了实例。
+        """
+        cur = paths.comfyui_url()
+        found = paths.discover_comfyui(timeout=0.25)
+        # 把「当前这台」补进列表（万一它不在扫描范围内，比如手动填了别的端口）
+        if not any(f["url"] == cur for f in found):
+            p = paths.probe_comfyui(cur, timeout=0.6)
+            if p:
+                found = [p] + found
+        self._json({
+            "ok": True,
+            "current": cur,
+            "source": paths.url_source(),
+            "dir": paths.comfyui_dir(),
+            # 环境变量在的话，界面上的切换是不生效的（优先级比 config 高）
+            "locked_by_env": bool(os.environ.get("COMFYUI_URL")),
+            "instances": found,
+        })
+
+    def _handle_comfyui_switch(self, data):
+        """切换要连的 ComfyUI。写 config.json + 刷新全进程的路径副本。"""
+        url = str(data.get("url") or "").strip()
+        ok, msg = paths.set_comfyui_url(url)
+        if not ok:
+            self._json({"ok": False, "error": msg})
             return
-        self._json({"ok": True, **r})
+        new_out = _refresh_comfyui_paths()
+        paths.publish_url()          # comfy_api 读的是环境变量，也要跟着走
+        self._json({
+            "ok": True,
+            "current": paths.comfyui_url(),
+            "dir": paths.comfyui_dir(),
+            "output": new_out,
+            "warn": "" if new_out else "这台没自报路径，输出目录暂时未知",
+        })
 
     def _handle_example_config(self):
         """返回 example_config.json，供生成页签当默认模板。"""
@@ -458,14 +575,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._json({"ok": False, "error": str(exc)})
 
     def _serve_html(self):
-        # 外壳（gui.HTML，持有唯一的 <style>）+ 各页签片段
-        # 页签拆成独立模块（gen_tab / queue_tab），外壳只留占位符 ——
-        # 加一个页签就是加一个模块 + 两行 replace
+        # 外壳（gui.HTML，持有唯一的 <style>）+ 各页签片段。
+        #
+        # 两类页签：
+        #   · 内核自带的 gen_tab / queue_tab —— 硬编码在这里的 4 行 replace
+        #   · 插件页签 —— 由 plugin_loader 汇总后填进 @PLUGIN_*@ 四个占位符，
+        #     加/删插件不需要动这个函数
         html = (gui.HTML
                 .replace("@GEN_CSS@", gen_tab.CSS)
                 .replace("@GEN_BODY@", gen_tab.BODY)
                 .replace("@QUEUE_CSS@", queue_tab.CSS)
-                .replace("@QUEUE_BODY@", queue_tab.BODY))
+                .replace("@QUEUE_BODY@", queue_tab.BODY)
+                .replace("@PLUGIN_CSS@", plugin_loader.tab_css(PLUGINS))
+                .replace("@PLUGIN_TABS@", plugin_loader.tab_buttons(PLUGINS))
+                .replace("@PLUGIN_BODY@", plugin_loader.tab_containers(PLUGINS))
+                .replace("@PLUGIN_JS@", plugin_loader.tab_js(PLUGINS))
+                # 页签元数据给前端 —— MLX.tabs 要先塞进插件页签，switchTab 才认它们。
+                # ⚠️ 这段 JSON 进的是 <script> 内部，label 来自 plugin.json（半受信）：
+                #    json.dumps 挡得住引号，挡不住 `</script>` 提前闭合脚本标签。
+                #    把 `</` 转成 `<\/`（JSON 里等价、HTML 里不再是闭合标签）。
+                .replace("@PLUGIN_TABMETA@",
+                         json.dumps(plugin_loader.tab_meta(PLUGINS),
+                                    ensure_ascii=False).replace("</", "<\\/")))
         body = html.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -652,9 +783,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
-    def _json(self, data):
+    def _json(self, data, code=200):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
-        self.send_response(200)
+        self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         # 不缓存：否则浏览器会留住旧的 API 响应（例如端点还不存在时的 404），
         # 表现为「重启了 server 但页面拿到的还是旧数据」

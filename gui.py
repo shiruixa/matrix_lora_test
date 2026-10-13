@@ -78,6 +78,10 @@ select{
 }
 select:focus{outline:none;border-color:var(--accent)}
 .ctrl select{font-weight:600;color:#fff}
+/* ComfyUI 实例选择器 —— 多便携版并存时，「连的是哪台」必须一眼看得见 */
+#cuiSel{max-width:360px;font-family:SF Mono,Consolas,monospace;font-size:11px}
+#cuiSel.off{border-color:#7a3a3a;color:#ffb4b4}
+#cuiSel.busy{opacity:.6}
 .axis-tag{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:5px;font-size:10px;font-weight:700}
 .axis-tag.x{background:#7c5cff33;color:#b9a6ff;border:1px solid #7c5cff55}
 .axis-tag.y{background:#3ddc9733;color:#7ff0c0;border:1px solid #3ddc9755}
@@ -90,46 +94,6 @@ select:focus{outline:none;border-color:var(--accent)}
 .facet-cell > .facet-title{font-size:11px;color:#ffd166;font-weight:700;margin-bottom:7px;
   font-family:SF Mono,Consolas,monospace;white-space:nowrap}
 
-/* 相似度散点 */
-.sim-wrap{position:relative;padding:18px}
-#simCanvas{background:var(--panel);border:1px solid var(--line);border-radius:12px;display:block}
-.sim-tip{position:absolute;background:rgba(13,16,32,.96);border:1px solid var(--line-2);
-  border-radius:10px;padding:8px;pointer-events:none;z-index:50;box-shadow:0 8px 28px #0009}
-.sim-tip img{width:180px;display:block;border-radius:6px;background:#0a0c1a}
-.sim-tip div{font-size:11px;color:var(--dim);margin-top:6px;max-width:180px;word-break:break-all;
-  font-family:SF Mono,Consolas,monospace}
-
-/* 相似度的数值化表格 */
-#tab-sim{overflow-y:auto;max-height:calc(100vh - 58px)}
-.mono{font-family:SF Mono,Cascadia Code,Consolas,monospace}
-.statcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-top:14px}
-.statcard h4{margin:0 0 9px;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.7px;font-weight:700}
-.statnote{font-size:11px;color:var(--dim-2);line-height:1.6;margin:7px 0 0}
-.statrow{display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:4px 0;
-  border-bottom:1px solid rgba(255,255,255,.04)}
-.statrow:last-of-type{border-bottom:none}
-.statrow span{color:var(--dim)}
-.statrow b{color:var(--txt);font-family:SF Mono,Consolas,monospace;font-weight:600}
-.stattable{width:100%;border-collapse:collapse;font-size:11px}
-.stattable th{text-align:left;color:var(--dim-2);font-weight:600;padding:3px 6px;
-  border-bottom:1px solid var(--line-2);font-size:10px;text-transform:uppercase;letter-spacing:.5px}
-.stattable td{padding:5px 6px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--txt);vertical-align:middle}
-.stattable tr:last-child td{border-bottom:none}
-.bar{height:9px;border-radius:5px;background:#1a1e38;overflow:hidden;min-width:70px}
-.bar > i{display:block;height:100%;border-radius:5px;
-  background:linear-gradient(90deg,var(--accent),var(--hot))}
-.statcols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media(max-width:900px){.statcols{grid-template-columns:1fr}}
-
-/* 诊断报告 */
-.diagsum{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--dim)}
-.diagsum b{color:var(--txt);font-family:SF Mono,Consolas,monospace}
-td.ok,.ok{color:var(--ok)}
-td.warn,.warn{color:#ffc46b}
-.diaglist{display:flex;flex-direction:column;gap:9px}
-.diagitem{display:flex;gap:11px;align-items:center}
-.diagitem img{width:66px;height:66px;object-fit:cover;border-radius:7px;flex:none;background:#0a0c1a}
-.diagitem b{font-size:11px;word-break:break-all}
 input[type=range]{
   -webkit-appearance:none;appearance:none;width:120px;height:4px;border-radius:2px;
   background:var(--line-2);outline:none;cursor:pointer;
@@ -297,19 +261,37 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .fbtn.fall.active{opacity:1;background:#3ddc9733;border-color:#3ddc9755;color:#7ff0c0}
 @GEN_CSS@
 @QUEUE_CSS@
+/* ── 跨页签共享的基础类 ──────────────────────────────────────────────
+   ⚠️ 这几个**必须留在内核**：任务队列页签（queue_tab.py）也在用
+   （`.mono` 的数字、`.ok/.warn` 的状态色、`.bar` 的进度条）。
+   2026-10-13 插件化时它们一度被搬进 plugins/analysis 的 CSS，
+   结果**卸载插件就把队列页签的样式弄坏了** —— 正是「可卸载」要避免的。
+   判断某条 CSS 属于谁：看它在**几个页签**里出现。≥2 个 → 内核。
+   （内联 `class="..."` 之外还要查 JS 拼串设类名的写法，那次就是漏了这种。） */
+.mono{font-family:SF Mono,Cascadia Code,Consolas,monospace}
+.bar{height:9px;border-radius:5px;background:#1a1e38;overflow:hidden;min-width:70px}
+.bar > i{display:block;height:100%;border-radius:5px;
+  background:linear-gradient(90deg,var(--accent),var(--hot))}
+td.ok,.ok{color:var(--ok)}
+td.warn,.warn{color:#ffc46b}
+
+@PLUGIN_CSS@
 </style>
 </head><body>
 
 <div class="topbar">
   <span class="brand"><span class="dot"></span>LoRA 矩阵</span>
   <button class="tabbtn active" id="tabbtn-view" onclick="switchTab('view')">网格查看</button>
-  <button class="tabbtn" id="tabbtn-sim" onclick="switchTab('sim')">融合诊断</button>
+@PLUGIN_TABS@
   <button class="tabbtn" id="tabbtn-gen" onclick="switchTab('gen')">新建矩阵</button>
   <button class="tabbtn" id="tabbtn-queue" onclick="switchTab('queue')">任务队列</button>
   <span id="viewTools" style="display:flex;gap:10px;align-items:center;flex:1;min-width:0">
     <input type="text" id="pathInput" placeholder="矩阵目录（默认 ComfyUI 的 output/matrix）" />
     <button class="btn ghost" id="browseBtn" onclick="pickFolder()">📂 浏览</button>
     <button class="btn" onclick="loadTasks()">⟳ 加载</button>
+    <select id="cuiSel" title="连的是哪台 ComfyUI（多开时在这里换）" onchange="cuiSwitch(this.value)"></select>
+    <button class="btn ghost" id="quitBtn" onclick="quitApp()"
+            title="关闭本工具本身。注意：关掉浏览器标签**不会**关掉它">⏻ 退出</button>
     <span id="taskInfo" style="font-size:11px;color:var(--dim);white-space:nowrap"></span>
   </span>
 </div>
@@ -365,19 +347,7 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 </div>
 </div><!-- /tab-view -->
 
-<div id="tab-sim" class="hidden">
-  <div class="toolbar">
-    <span style="font-size:12px;color:var(--dim)">散点图只作<b>全局概览</b>（效果接近的会自动聚在一起）—— 结论看下方诊断报告</span>
-    <button class="btn ghost" onclick="simLoad()">⟳ 重算</button>
-    <span id="simInfo" style="font-size:11px;color:var(--dim);margin-left:auto;white-space:nowrap"></span>
-  </div>
-  <div class="sim-wrap">
-    <canvas id="simCanvas"></canvas>
-    <div id="simTip" class="sim-tip hidden"></div>
-  </div>
-  <div id="simStats" style="padding:0 18px 22px"></div>
-</div>
-
+@PLUGIN_BODY@
 <div id="tab-gen" class="hidden">@GEN_BODY@</div>
 
 <div id="tab-queue" class="hidden">@QUEUE_BODY@</div>
@@ -394,31 +364,82 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 </div>
 
 <script>
+// ── 插件宿主接口 ───────────────────────────────────────────────────────
+// 插件跑在自己的 IIFE 里，只能通过这个对象跟内核说话 ——
+// 不去抓内核内部标识符（那些名字内核随时可以改）。
+//
+// ⚠️ marks 用 getter 不能用引用：内核在 loadMarks() 里会**整体重新赋值**
+//    `marks = JSON.parse(localStorage...)`，插件手里攥着旧对象就会读到过期星标。
+window.MLX = {
+  api: api,
+  escAttr: escAttr,
+  escHtml: escHtml,
+  openTask: openTask,
+  switchTab: switchTab,
+  getMarks: function(){ return marks },
+  getFolder: function(){ return (document.getElementById('pathInput').value || '').trim() },
+
+  tabs: [],                       // 内核 + 插件的全部页签，switchTab 遍历它
+  _hooks: {},                     // {事件名: [回调]}
+
+  // 插件页签元数据（server 按 plugin.json 注入）。
+  // 用途：插件**因缺依赖没启用**时它的脚本不会注入，registerTab 也就跑不到，
+  // 光靠自注册页签会凭空消失。先用这份元数据把页签立起来，内容是「未启用」提示。
+  pluginMeta: @PLUGIN_TABMETA@,
+
+  // 同一个 id 再注册一次 → 覆盖（插件脚本随后补上 onShow）
+  registerTab: function(t){
+    for (var i = 0; i < this.tabs.length; i++) {
+      if (this.tabs[i].id === t.id) { this.tabs[i] = t; return }
+    }
+    this.tabs.push(t);
+  },
+  on: function(evt, fn){ (this._hooks[evt] = this._hooks[evt] || []).push(fn) },
+  emit: function(evt){
+    var a = this._hooks[evt] || [];
+    for (var i = 0; i < a.length; i++) {
+      try { a[i]() } catch (e) { console.error('[plugin] 钩子 ' + evt + ' 出错:', e) }
+    }
+  },
+  // 插件把内联 onclick 要用的函数挂到全局
+  expose: function(obj){ for (var k in obj) window[k] = obj[k] },
+};
+
 // ── 标签切换 ──
 function switchTab(name){
-  var isView = (name === 'view');
-  var isGen  = (name === 'gen');
-  var isSim  = (name === 'sim');
-  var isQ    = (name === 'queue');
-  document.getElementById('tab-view').classList.toggle('hidden', !isView);
-  document.getElementById('tab-gen').classList.toggle('hidden', !isGen);
-  document.getElementById('tab-sim').classList.toggle('hidden', !isSim);
-  document.getElementById('tab-queue').classList.toggle('hidden', !isQ);
-  document.getElementById('tabbtn-view').classList.toggle('active', isView);
-  document.getElementById('tabbtn-gen').classList.toggle('active', isGen);
-  document.getElementById('tabbtn-sim').classList.toggle('active', isSim);
-  document.getElementById('tabbtn-queue').classList.toggle('active', isQ);
-  document.getElementById('viewTools').style.display = isView ? 'flex' : 'none';
+  // 页签表由内核注册（view/gen/queue）+ 插件自注册（MLX.registerTab）拼成，
+  // 这里不再硬编码 —— 加一个插件页签不需要动内核。
+  MLX.tabs.forEach(function(t){
+    var el = document.getElementById('tab-' + t.id);
+    if (el) el.classList.toggle('hidden', t.id !== name);
+    var btn = document.getElementById('tabbtn-' + t.id);
+    if (btn) btn.classList.toggle('active', t.id === name);
+    if (t.id === name && t.onShow) t.onShow();
+  });
+  document.getElementById('viewTools').style.display = (name === 'view') ? 'flex' : 'none';
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
-  if (isGen && window.genInit) window.genInit();   // 首次切过去时才初始化
-  if (isSim) simLoad();
-  if (isQ && typeof qInit === 'function') qInit();
+  // ⚠️ 这里**不要**再调 genInit()/qInit() —— 上面 forEach 已经通过 onShow 调过了。
+  //    早先两处都写，gen 因为有 genReady 守卫没露馅，queue 的 qInit 没有守卫，
+  //    结果是每次切到队列页都发两遍 /api/run/status、还 clearInterval 重设一次轮询。
   // 切回网格页：离开期间画布是 display:none，量出来的高度是 0，必须重新量一遍
-  if (isView) { layoutGrid(); if (!viewTouched) fitView(); }
+  if (name === 'view') { layoutGrid(); if (!viewTouched) fitView(); }
 }
+// 内核自带的三个页签。插件的由 plugin_loader 注入的脚本调 MLX.registerTab 追加。
+MLX.tabs = [
+  { id: 'view',  label: '网格查看' },
+  { id: 'gen',   label: '新建矩阵', onShow: function(){ if (window.genInit) window.genInit() } },
+  { id: 'queue', label: '任务队列', onShow: function(){ if (typeof qInit === 'function') qInit() } },
+];
+// 插件页签先按元数据登记（必须在本行之后 —— 上面那行会把 tabs 整个换掉）。
+// 启用的插件稍后由自己的脚本 registerTab 覆盖补上 onShow；
+// 没启用的就保持这样，页签在、内容是未启用提示。
+MLX.pluginMeta.forEach(function(t){ MLX.registerTab(t) });
 window.addEventListener('DOMContentLoaded', function(){
   var h = (location.hash || '').replace('#', '');
-  if (h === 'view' || h === 'gen' || h === 'sim' || h === 'queue') switchTab(h);
+  // 白名单改成查页签表 —— 插件页签也能直接被 #sim 这种 hash 打开
+  for (var i = 0; i < MLX.tabs.length; i++) {
+    if (MLX.tabs[i].id === h) { switchTab(h); break }
+  }
 });
 
 // ── State ──
@@ -435,6 +456,7 @@ var facetDim = null;      // facet 模式下当分面的维度名
 // ── Init ──
 document.addEventListener("DOMContentLoaded", function() {
   loadQuickFolders();      // 顶部那排快捷目录（并据 has_tk 决定藏不藏「浏览」按钮）
+  cuiLoad();               // ComfyUI 实例选择器（多便携版并存时用）
   fetch("/api/config").then(r => r.json()).then(cfg => {
     if (cfg.last_folder) {
       document.getElementById("pathInput").value = cfg.last_folder;
@@ -532,6 +554,86 @@ function pickFolder() {
   });
 }
 
+// ── 退出工具 ──────────────────────────────────────────────────────────
+// exe 是 --windowed（没有黑框框），所以「关掉浏览器标签」**不会**关掉工具 ——
+// 进程还在后台占着端口，再双击一次就变成两个实例。这里给一条明确的路。
+function quitApp(){
+  if (!confirm('关闭「LoRA 矩阵测试台」？\n\n'
+             + '注意：关掉浏览器标签不会关掉它，得点这里。')) return;
+  var btn = document.getElementById('quitBtn');
+  if (btn){ btn.disabled = true; btn.textContent = '正在关闭…'; }
+  api('POST', '/api/quit', {}).then(function(d){
+    if (!d || !d.ok){
+      // 唯一的正常失败是「不是由 matrix_viewer 启动的」（开发时直接跑 server）
+      if (btn){ btn.disabled = false; btn.textContent = '⏻ 退出'; }
+      alert('退出失败：' + ((d && d.error) || '未知错误')
+          + '\n\n也可以在任务管理器里结束 MatrixLoRATest.exe');
+      return;
+    }
+    // 已回响应、后端正在关停 —— 这页不会再连上，直接换成告别文案
+    document.body.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:center;'
+      + 'height:100vh;flex-direction:column;gap:16px;color:var(--dim);font-size:15px">'
+      + '<div style="font-size:36px">👋</div>'
+      + '<div>工具已关闭，这个标签页可以关掉了</div></div>';
+  });
+}
+
+// ── ComfyUI 实例选择器 ────────────────────────────────────────────────
+// 多便携版并存时，端口是唯一的区分依据。这里把扫到的都列出来，
+// 每项带上**那台自报的路径** —— 否则两个 `127.0.0.1:81xx` 用户分不清谁是谁。
+var CUI = { cur: '', list: [] };
+
+function cuiLoad(){
+  var sel = document.getElementById('cuiSel');
+  if (!sel) return;
+  api('GET', '/api/comfyui').then(function(d){
+    if (!d || !d.ok) return;
+    CUI.cur = d.current || '';
+    CUI.list = d.instances || [];
+    var MANUAL = '<option value="__manual__">＋ 手动填地址…</option>';
+    if (!CUI.list.length){
+      // 扫不到不等于没有 —— ComfyUI 可能跑在 `--port 9000` 这种非默认端口上
+      sel.innerHTML = '<option value="">未找到 ComfyUI</option>' +
+                      '<option value="__manual__">＋ 手动填地址…</option>';
+      sel.className = 'off';
+      sel.title = '默认端口（8188-8199）上没扫到 ComfyUI。\n'
+                + '先确认它在跑；如果它用了别的端口，选「手动填地址」。';
+      return;
+    }
+    sel.innerHTML = CUI.list.map(function(it){
+      var label = String(it.url).replace(/^https?:\/\//, '') +
+                  (it.dir ? '   ' + it.dir : '   （未自报路径）');
+      return '<option value="' + escAttr(it.url) + '"' +
+             (it.url === CUI.cur ? ' selected' : '') + '>' + esc(label) + '</option>';
+    }).join('') + MANUAL;
+    sel.className = '';
+    sel.title = '连的是哪台 ComfyUI。多开时在这里换（换完会自动重新加载）。'
+              + (d.locked_by_env ? '\n⚠ 环境变量 COMFYUI_URL 正覆盖着配置，这里的切换不会生效。' : '');
+  });
+}
+
+function cuiSwitch(url){
+  if (url === '__manual__'){
+    // 扫描只覆盖默认端口段；跑在别的端口就手填
+    var v = prompt('ComfyUI 地址（形如 http://127.0.0.1:9000）：',
+                   CUI.cur || 'http://127.0.0.1:8188');
+    if (!v){ cuiLoad(); return }
+    url = v.trim();
+  }
+  if (!url || url === CUI.cur){ cuiLoad(); return }
+  var sel = document.getElementById('cuiSel');
+  if (sel) sel.className = 'busy';
+  api('POST', '/api/comfyui', { url: url }).then(function(d){
+    if (sel) sel.className = '';
+    if (!d || !d.ok){ alert('切换失败：' + ((d && d.error) || '未知错误')); cuiLoad(); return; }
+    CUI.cur = d.current;
+    toast('已切到 ' + d.current + (d.warn ? '（' + d.warn + '）' : ''));
+    loadTasks();      // 换实例 = 换 output 目录 → 重新加载
+    cuiLoad();
+  });
+}
+
 // ── Load ──
 function loadTasks() {
   var folder = document.getElementById("pathInput").value.trim();
@@ -584,10 +686,8 @@ function loadTasks() {
       // 等图片撑开布局后：先按实际高度重设画布，再适应 —— 243 张也能一屏看全。
       // 顺序不能反：fitView 读的 clientHeight 由 layoutGrid 决定。
       setTimeout(function(){ layoutGrid(); fitView(); }, 70);
-      // 用户若直接落在「相似度」标签，目录加载完再算（DOMContentLoaded 那会儿
-      // pathInput 还是空的 —— config 是异步取的）
-      if (typeof simLoad === "function" &&
-          !document.getElementById("tab-sim").classList.contains("hidden")) simLoad();
+      // 目录加载完 —— 插件页签自己决定要不要补算
+      MLX.emit('folder-loaded');
     })
     .catch(function(err) {
       sp.classList.add("hidden");
@@ -696,9 +796,8 @@ function toggleMark(ev, key) {
   if (marks[key]) delete marks[key]; else marks[key] = true;
   saveMarks();
   renderGrid();
-  // 相似度视图开着的话同步刷新
-  var sim = document.getElementById("tab-sim");
-  if (sim && !sim.classList.contains("hidden") && typeof renderScatter === "function") renderScatter();
+  // 星标变了 —— 插件页签自己监听（原先是内核替 sim 操心）
+  MLX.emit('marks-changed');
 }
 function setOnlyMarked(on) {
   onlyMarked = !!on;
@@ -831,293 +930,6 @@ function updateMarkCount() {
   if (el) el.textContent = n ? ('★ ' + n) : '';
 }
 
-// ── 相似度散点 ──
-var simPoints = [], simExplained = [0, 0], simLoadedFor = "";
-var simImgCache = {};   // 避免每次重绘都重新解码 PNG
-
-function simGetImg(url, cb) {
-  if (simImgCache[url]) { cb(simImgCache[url]); return }
-  var im = new Image();
-  im.onload = function(){ simImgCache[url] = im; cb(im) };
-  im.onerror = function(){ cb(null) };
-  im.src = url;
-}
-
-// 把提示画在画布上 —— 多行等宽，方便直接复制里面的命令
-function simShowMsg(msg) {
-  var info = document.getElementById("simInfo");
-  if (info) info.textContent = "无法计算";
-  var st = document.getElementById("simStats");
-  if (st) st.innerHTML = "";      // 出错时别留着上一次的表格
-  var cv = document.getElementById("simCanvas");
-  if (!cv) return;
-  var wrap = cv.parentElement;
-  var W = Math.max(420, wrap.clientWidth - 36);
-  var H = Math.round(Math.max(240, Math.min(660, window.innerHeight * 0.52)));
-  cv.width = W; cv.height = H;
-  cv.style.width = W + "px"; cv.style.height = H + "px";
-  var ctx = cv.getContext("2d");
-  ctx.clearRect(0, 0, W, H);
-  ctx.font = "12px SF Mono, Consolas, monospace";
-  var y = 44;
-  String(msg).split("\n").forEach(function(ln, i){
-    ctx.fillStyle = i === 0 ? "#ff8fa3" : "#8a93bb";
-    ctx.fillText(ln, 26, y);
-    y += 20;
-  });
-}
-
-function simLoad() {
-  var folder = document.getElementById("pathInput").value.trim();
-  var info = document.getElementById("simInfo");
-  if (!folder) { simShowMsg("先在「网格查看」标签里选好矩阵目录"); return }
-  if (simLoadedFor === folder && simPoints.length) { simDraw(); return }
-  info.textContent = "计算中…";
-  api('GET', '/api/similarity?folder=' + encodeURIComponent(folder)).then(function(d){
-    if (!d || !d.ok) { simShowMsg((d && d.error) || "计算失败"); return }
-    if (d.error) { simShowMsg(d.error); return }   // 缺依赖之类：给提示而不是崩
-    simPoints = d.points || [];
-    simExplained = d.explained || [0, 0];
-    simLoadedFor = folder;
-    info.textContent = simPoints.length + " 张 · 前两主成分解释 "
-      + (simExplained[0] * 100).toFixed(0) + "% + " + (simExplained[1] * 100).toFixed(0) + "%";
-    simDraw();
-    simRenderReport(d.diagnose);
-  });
-}
-
-// ── 诊断报告 ──
-// 从诊断里挑出组合 → 切到「新建矩阵」把组合选择里的勾选换成这些
-function simSelectOnly(keys){
-  switchTab('gen');
-  setTimeout(function(){
-    if (typeof genCombos === "undefined" || !genCombos.length) {
-      genMsg("请先在「新建矩阵」里配好并生成一次任务清单", "err");
-      return;
-    }
-    var want = {};
-    keys.forEach(function(k){ want[k] = 1 });
-    genCombos.forEach(function(c){ c.sel = !!want[c.key] });
-    genOpenCombos();
-    genMsg("已只选 " + keys.length + " 个组合（去复核）", "ok");
-  }, 260);
-}
-
-// ── 诊断报告渲染 ──────────────────────────────────────────────────────────
-// 每个区块一个函数，simRenderReport() 只负责拼。改某一块不用读整段 110 行。
-// 后端 diagnose.py 的 ANALYSES 清单决定返回哪些键；这里要把新块接上才能显示
-// （后端加一项诊断 = 加一个函数 + 在下面拼一行）。
-
-function simBlockSummary(d){
-  var eff   = d.effective || [];
-  var outs  = d.outliers || [];
-  var inter = d.interference || [];
-  var weak  = eff.filter(function(e){ return e.verdict === "无效" }).length;
-  var bad   = inter.filter(function(x){ return x.verdict === "可能互相干扰" }).length;
-  return '<div class="statcard"><h4>诊断总结</h4><div class="diagsum">'
-     + '<span><b>' + d.n + '</b> 个组合</span>'
-     + '<span class="' + (weak ? 'warn' : 'ok') + '"><b>' + eff.length + '</b> 个 LoRA，'
-     + (weak ? weak + ' 个疑似无效' : '全部有效') + '</span>'
-     + '<span class="' + (outs.length ? 'warn' : 'ok') + '"><b>' + outs.length + '</b> 个可疑组合</span>'
-     + '<span class="' + (bad ? 'warn' : 'ok') + '"><b>' + bad + '</b> 对可能干扰</span>'
-     + '</div></div>';
-}
-
-// ① 有效性
-function simBlockEffective(eff){
-  var h = '<div class="statcard"><h4>① LoRA 有效性</h4>'
-     + '<div class="statnote" style="margin:0 0 9px">与 baseline（不加任何 LoRA）的画面距离 —— '
-     + '太小说明加了等于没加</div>';
-  if (eff.length) {
-    h += '<table class="stattable"><thead><tr><th>LoRA</th><th>距离</th><th>相对</th>'
-       + '<th>判定</th></tr></thead><tbody>';
-    eff.forEach(function(e){
-      h += '<tr><td class="mono">' + esc(e.dim) + '</td>'
-         + '<td class="mono">' + e.dist + '</td>'
-         + '<td class="mono" style="color:var(--dim-2)">x' + e.ratio + '</td>'
-         + '<td class="' + (e.verdict === "无效" ? "warn" : "ok") + '">' + e.verdict + '</td></tr>';
-    });
-    h += '</tbody></table>';
-  } else {
-    h += '<div class="statnote" style="margin:0">没有找到 baseline 组合，无法比较</div>';
-  }
-  return h + '</div>';
-}
-
-// ② 可疑组合
-function simBlockOutliers(outs){
-  var h = '<div class="statcard"><h4>② 可疑组合（画面明显偏离大部队）';
-  if (outs.length) {
-    var keys = outs.map(function(o){ return o.key });
-    h += '<button class="btn ghost" style="float:right;padding:2px 10px;font-size:11px" '
-       + 'onclick="simSelectOnly(' + escAttr(JSON.stringify(keys)) + ')">只跑这些去复核</button>';
-  }
-  h += '</h4>';
-  if (outs.length) {
-    h += '<div class="diaglist">';
-    outs.forEach(function(o){
-      h += '<div class="diagitem">'
-         + (o.img ? '<img src="' + escAttr(o.img) + '" loading="lazy" />' : '')
-         + '<div><b class="mono">' + esc(o.name) + '</b>'
-         + '<div class="statnote" style="margin:2px 0 0">偏离 <span class="warn">' + o.sigma
-         + 'σ</span>（到其他组合的平均差异 ' + o.score + '）</div></div></div>';
-    });
-    h += '</div>';
-  } else {
-    h += '<div class="statnote" style="margin:0">没有明显离群的组合 —— 没有哪组崩得特别厉害</div>';
-  }
-  return h + '</div>';
-}
-
-// ③ 饱和点
-function simBlockSaturation(sats){
-  var h = '<div class="statcard"><h4>③ 强度饱和点</h4>'
-     + '<div class="statnote" style="margin:0 0 9px">同一 LoRA 相邻强度档之间的画面变化量 —— '
-     + '越往右越短说明再加强度收益递减</div>'
-     + '<table class="stattable"><thead><tr><th>LoRA</th><th>档位</th>'
-     + '<th style="width:38%">相邻档变化量</th><th>结论</th></tr></thead><tbody>';
-  sats.forEach(function(s){
-    var mx = Math.max.apply(null, s.deltas) || 1;
-    var bars = s.deltas.map(function(dd){
-      var w = Math.max(6, Math.round(dd / mx * 46));
-      return '<div class="bar" style="display:inline-block;width:' + w
-           + 'px;margin-right:3px;vertical-align:middle"><i style="width:100%"></i></div>';
-    }).join('');
-    h += '<tr><td class="mono">' + esc(s.dim) + '</td>'
-       + '<td class="mono" style="color:var(--dim-2);white-space:nowrap">' + s.levels.join('→') + '</td>'
-       + '<td>' + bars + '</td>'
-       + '<td class="' + (s.enough ? '' : 'warn') + '">' + esc(s.note) + '</td></tr>';
-  });
-  return h + '</tbody></table></div>';
-}
-
-// ④ 干扰
-function simBlockInterference(inter){
-  var h = '<div class="statcard"><h4>④ LoRA 互相干扰</h4>'
-     + '<div class="statnote" style="margin:0 0 9px">理想融合应落在「单用 A」和「单用 B」之间；'
-     + '跑到两者之外（比值 &gt;1）说明叠加产生了第三种东西，往往是崩坏</div>';
-  if (inter.length) {
-    h += '<table class="stattable"><thead><tr><th>组合</th><th>比值</th>'
-       + '<th>样本</th><th>判定</th></tr></thead><tbody>';
-    inter.forEach(function(x){
-      h += '<tr><td class="mono">' + esc(x.a) + ' <span style="color:var(--dim-2)">×</span> '
-         + esc(x.b) + '</td><td class="mono">' + x.ratio + '</td>'
-         + '<td class="mono" style="color:var(--dim-2)">' + x.samples + '</td>'
-         + '<td class="' + (x.verdict === "可能互相干扰" ? "warn" : "ok") + '">'
-         + x.verdict + '</td></tr>';
-    });
-    h += '</tbody></table>';
-  } else {
-    h += '<div class="statnote" style="margin:0">需要「单用 A」「单用 B」「一起用」三类组合都存在才能判断</div>';
-  }
-  return h + '</div>';
-}
-
-function simRenderReport(d){
-  var box = document.getElementById("simStats");
-  if (!box) return;
-  if (!d) { box.innerHTML = ""; return }
-  if (d.error) {
-    box.innerHTML = '<div class="statcard"><h4>诊断失败</h4>'
-      + '<div class="statnote" style="margin:0">' + esc(d.error) + '</div></div>';
-    return;
-  }
-  box.innerHTML = simBlockSummary(d)
-    + simBlockEffective(d.effective || [])
-    + simBlockOutliers(d.outliers || [])
-    + simBlockSaturation(d.saturation || [])
-    + simBlockInterference(d.interference || []);
-}
-
-function simDraw() {
-  var cv = document.getElementById("simCanvas");
-  if (!cv) return;
-  var wrap = cv.parentElement;
-  var W = Math.max(420, wrap.clientWidth - 36);
-  // 别占满视口 —— 下面还有数值表格要看。整页交给 #tab-sim 滚动
-  var H = Math.round(Math.max(360, Math.min(660, window.innerHeight * 0.52)));
-  cv.width = W; cv.height = H;
-  cv.style.width = W + "px"; cv.style.height = H + "px";
-  var ctx = cv.getContext("2d");
-  ctx.clearRect(0, 0, W, H);
-  if (simPoints.length < 2) {
-    ctx.fillStyle = "#8a93bb"; ctx.font = "13px sans-serif";
-    ctx.fillText("至少需要 2 张有图的组合", 24, 44);
-    return;
-  }
-  var xs = simPoints.map(function(p){return p.x}), ys = simPoints.map(function(p){return p.y});
-  var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
-  var y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
-  var pad = 70, TS = 58;
-  simPoints.forEach(function(p){
-    p._sx = pad + (p.x - x0) / Math.max(1e-6, x1 - x0) * (W - pad * 2);
-    p._sy = H - pad - (p.y - y0) / Math.max(1e-6, y1 - y0) * (H - pad * 2);
-  });
-  // 散开挤在一起的缩略图 —— PCA 只保留两维，投影重叠很常见，不散开看不清有几张。
-  // 用网格分桶（精确坐标匹配不够，相邻但不相等的点照样会叠），
-  // 桶内再按黄金角螺旋铺开，分布最均匀
-  var BUCKET = TS + 6, seen = {};   // 桶要 ≥ 缩略图尺寸，否则相邻桶的图仍然叠
-  simPoints.forEach(function(p){
-    var k = Math.round(p._sx / BUCKET) + "|" + Math.round(p._sy / BUCKET);
-    var n = (seen[k] = (seen[k] || 0) + 1);
-    if (n > 1) {
-      var ang = n * 2.399963229728653;
-      var rad = TS * 0.62 * Math.sqrt(n - 1);
-      p._sx += Math.cos(ang) * rad;
-      p._sy += Math.sin(ang) * rad;
-    }
-  });
-  var pending = simPoints.length;
-  simPoints.forEach(function(p){
-    simGetImg(p.img, function(im){
-      if (im) ctx.drawImage(im, p._sx - TS / 2, p._sy - TS / 2, TS, TS);
-      else { ctx.fillStyle = "#28304f"; ctx.fillRect(p._sx - TS / 2, p._sy - TS / 2, TS, TS) }
-      var mk = marks[p.key];
-      ctx.strokeStyle = mk ? "#ffd166" : "rgba(255,255,255,.18)";
-      ctx.lineWidth = mk ? 2.5 : 1;
-      ctx.strokeRect(p._sx - TS / 2, p._sy - TS / 2, TS, TS);
-      if (mk) {
-        ctx.fillStyle = "#ffd166"; ctx.font = "13px sans-serif";
-        ctx.fillText("★", p._sx + TS / 2 - 14, p._sy - TS / 2 + 14);
-      }
-      if (--pending === 0) simBind(cv);
-    });
-  });
-}
-
-function simHit(cv, e) {
-  var r = cv.getBoundingClientRect();
-  var mx = e.clientX - r.left, my = e.clientY - r.top;
-  for (var i = 0; i < simPoints.length; i++) {
-    var p = simPoints[i];
-    if (Math.abs(mx - p._sx) <= 32 && Math.abs(my - p._sy) <= 32) return p;
-  }
-  return null;
-}
-
-function simBind(cv) {
-  cv.onmousemove = function(e){
-    var hit = simHit(cv, e);
-    var tip = document.getElementById("simTip");
-    if (hit) {
-      tip.innerHTML = '<img src="' + escAttr(hit.img) + '" /><div>' + escHtml(hit.key) + '</div>';
-      tip.style.left = Math.min(hit._sx + 36, Math.max(0, cv.width - 200)) + 'px';
-      tip.style.top = Math.max(0, hit._sy - 40) + 'px';
-      tip.classList.remove("hidden");
-      cv.style.cursor = "pointer";
-    } else {
-      tip.classList.add("hidden");
-      cv.style.cursor = "default";
-    }
-  };
-  cv.onmouseleave = function(){ document.getElementById("simTip").classList.add("hidden") };
-  cv.onclick = function(e){
-    var hit = simHit(cv, e);
-    if (!hit) return;
-    switchTab('view');
-    setTimeout(function(){ openTask(hit.key) }, 60);   // 等网格渲染完再开弹窗
-  };
-}
 
 window.addEventListener('resize', function(){
   // 网格页：先按新窗口高度重新量画布，用户没手动调过视角就顺带重新适应
@@ -1125,8 +937,8 @@ window.addEventListener('resize', function(){
   layoutGrid();
   var gridTab = document.getElementById('tab-view');
   if (gridTab && !gridTab.classList.contains('hidden') && !viewTouched) fitView();
-  var tab = document.getElementById('tab-sim');
-  if (tab && !tab.classList.contains('hidden') && simPoints.length) simDraw();
+  // 插件页签自己决定要不要按新尺寸重画（原先这里直接 simDraw()，是内核替插件操心）
+  MLX.emit('resize');
 });
 
 // 画一个二维网格表（供 renderGrid 与 renderFacet 复用）
@@ -1533,6 +1345,26 @@ function escHtml(s) {
 // 生成页签用更短的名字，两个名字指向同一实现
 var esc = escHtml;
 
+// ── 时间格式化（跨页签共享）──────────────────────────────────────────
+// 以前有三个各写各的副本：gen 的 genFmtTime（带年份）、queue 的 qFmtTime
+// （不带年份）、生成的 gstamp（紧凑文件名用），补零还一个用
+// ('0'+n).slice(-2)、一个用 (n<10?'0':'')+n。显示格式不同是有意的
+// （生成页看历史要年份、队列页看当天不需要），所以保留三种**输出**，
+// 只把 Date 构造和补零收敛到这里。
+//   'ymdhm'   → 2026-10-13 14:30   （生成页：预设的历史时间）
+//   'mdhm'    → 10-13 14:30        （队列页：当天的清单）
+//   'compact' → 20261013_1430      （文件名用，无分隔符）
+function fmtTime(ts, style){
+  var d = (ts === undefined || ts === null) ? new Date() : new Date(ts * 1000);
+  var p = function(n){ return (n < 10 ? '0' : '') + n };
+  var md = p(d.getMonth() + 1) + '-' + p(d.getDate());
+  var hm = p(d.getHours()) + ':' + p(d.getMinutes());
+  if (style === 'mdhm')    return md + ' ' + hm;
+  if (style === 'compact') return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate())
+                                  + '_' + p(d.getHours()) + p(d.getMinutes());
+  return d.getFullYear() + '-' + md + ' ' + hm;
+}
+
 // 统一的 JSON 请求封装：失败一律归一到 {ok:false,error}，调用方不必 try/catch
 function api(method, path, body) {
   var opt = { method: method, headers: { 'Content-Type': 'application/json' } };
@@ -1544,6 +1376,8 @@ function api(method, path, body) {
 function escAttr(s) {
   return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+@PLUGIN_JS@
 </script>
 </body></html>
 """

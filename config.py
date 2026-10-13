@@ -6,6 +6,14 @@ import os
 import sys
 from pathlib import Path
 
+# ⚠️ 数据目录一律走 paths.data_dir()，**不要**用 Path(__file__).parent ——
+#    冻结成 exe 之后 __file__ 指向 _internal/，用户的配置/预设会被写进去，
+#    既找不到、又会在换 exe 时被覆盖。见 paths.data_dir() 的说明。
+_HERE_DIR = os.path.dirname(os.path.abspath(__file__))
+if _HERE_DIR not in sys.path:
+    sys.path.insert(0, _HERE_DIR)
+import paths as _paths          # noqa: E402  （paths 不 import 本模块，无循环）
+
 # 默认目录 = ComfyUI 的 output/matrix（生图与 task.json 都写在那里）
 try:
     from paths import COMFYUI_OUTPUT
@@ -13,7 +21,7 @@ try:
 except Exception:
     DEFAULT_FOLDER = ""
 
-CONFIG_FILE = Path(__file__).parent / ".matrix_viewer_config.json"
+CONFIG_FILE = Path(_paths.data_dir()) / ".matrix_viewer_config.json"
 
 
 def load():
@@ -45,7 +53,7 @@ def save(cfg):
 # ⚠️ 绝不能存进 json/ —— task_runner.main() 会把那里
 #    最新的文件当任务清单，遇到 dict 会迭代出字符串键然后崩溃。
 
-PRESET_DIR = Path(__file__).parent / "matrix_configs"
+PRESET_DIR = Path(_paths.data_dir()) / "matrix_configs"
 
 
 def _safe_preset_name(name):
