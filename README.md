@@ -79,8 +79,12 @@
 
 ### ② 只要工具本体
 
-`MatrixLoRATest.zip`（约 37 MB，**不含 ComfyUI**）—— 你自己已经有配好的
-ComfyUI 就下这个，只有工具本身。
+**[MatrixLoRATest.zip](https://github.com/shiruixa/matrix_lora_test/releases/latest)**
+（约 37 MB，**不含 ComfyUI**）—— 你自己已经有配好的 ComfyUI 就下这个。
+从 GitHub 下载，比网盘快、也没限速。
+
+用法：解压 → **双击 `MatrixLoRATest.exe`** → 浏览器自动打开。
+关掉它请点**页面右上角的「退出」**（关浏览器标签不会关掉它）。
 
 ---
 
